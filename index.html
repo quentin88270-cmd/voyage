@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#007bff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Roadbook — Carnet de voyage</title>
+
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icon-180.png">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+      body { background:#f0f2f5; font-family: system-ui, sans-serif; padding-bottom:80px; }
+      .btn-fab {
+        background: linear-gradient(135deg,#007bff,#0056b3); border:none;
+        box-shadow:0 4px 15px rgba(0,123,255,.4); transition:transform .2s;
+        position:fixed; bottom:20px; right:20px; width:60px; height:60px;
+        border-radius:50%; font-size:30px; z-index:2000; color:#fff;
+      }
+      .btn-fab:active { transform:scale(.92); }
+      .nav-tabs { background:#fff; position:sticky; top:0; z-index:1000; border-bottom:none; }
+      #map { height:250px; width:100%; border-radius:15px; margin-bottom:15px; background:#e9ecef; }
+      .card { border:none; border-radius:12px; margin-bottom:12px; box-shadow:0 2px 4px rgba(0,0,0,.05); }
+      .check-item { display:flex; align-items:center; background:#fff; padding:12px; border-radius:10px; margin-bottom:8px; }
+      .check-item input { margin-right:15px; transform:scale(1.3); }
+      .check-item.done span { text-decoration:line-through; color:#adb5bd; }
+      .day-nav { background:#fff; padding:12px; border-radius:15px; margin-bottom:15px; }
+      #countdown { background:linear-gradient(90deg,#007bff,#00c6ff); color:#fff; border-radius:12px; padding:12px; margin:10px; text-align:center; font-weight:bold; font-size:1.1rem; }
+      .weather-card { background:#fff; border-radius:15px; padding:14px 16px; margin-bottom:15px; box-shadow:0 2px 4px rgba(0,0,0,.05); border-left:4px solid #00c6ff; }
+      .badge-billet { background:#e7f3ff; color:#007bff; font-size:.7rem; padding:3px 8px; border-radius:5px; font-weight:bold; display:inline-block; margin-top:5px; border:1px solid #007bff; cursor:pointer; }
+      .budget-total { background:#198754; color:#fff; border-radius:15px; padding:15px; margin-bottom:15px; text-align:center; }
+      .empty { text-align:center; padding:40px 15px; background:#fff; border-radius:20px; border:2px dashed #dee2e6; margin-top:10px; }
+      .empty .emo { font-size:50px; opacity:.5; margin-bottom:10px; }
+    </style>
+  </head>
+  <body>
+
+    <div id="countdown">…</div>
+    <button class="btn btn-fab" data-bs-toggle="modal" data-bs-target="#modalChoix" aria-label="Ajouter">+</button>
+
+    <div class="d-flex justify-content-between align-items-center px-3 pt-1 pb-1">
+      <h5 id="mainTitle" class="fw-bold mb-0 text-muted" style="font-size:.8rem; letter-spacing:1px;">ROADBOOK</h5>
+      <button class="btn btn-link p-0 text-muted" style="text-decoration:none; font-size:1.1rem;" onclick="openConfig()">⚙️</button>
+    </div>
+
+    <!-- CONFIG / NOUVEAU VOYAGE -->
+    <div class="modal fade" id="modalConfig" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:20px;">
+          <div class="modal-header border-0"><h5 class="fw-bold">Réglages</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+          <div class="modal-body">
+            <div class="mb-3"><label class="small text-muted">Titre du voyage</label><input type="text" id="cfgTitle" class="form-control"></div>
+            <div class="mb-3"><label class="small text-muted">Date de départ</label><input type="date" id="cfgDate" class="form-control"></div>
+            <button class="btn btn-primary w-100 mb-3" onclick="saveConfig()">Enregistrer</button>
+            <hr>
+            <label class="small text-muted">Sauvegarde</label>
+            <div class="d-flex gap-2 mb-3">
+              <button class="btn btn-outline-secondary flex-fill" onclick="exportData()">⬇️ Exporter</button>
+              <button class="btn btn-outline-secondary flex-fill" onclick="document.getElementById('importFile').click()">⬆️ Importer</button>
+              <input type="file" id="importFile" accept="application/json" class="d-none" onchange="importData(this)">
+            </div>
+            <div class="alert alert-warning small mb-0">Les données sont stockées sur cet appareil. Pense à exporter avant de vider le cache du navigateur.</div>
+            <hr>
+            <button class="btn btn-outline-danger w-100" onclick="resetTrip()">🗑️ Effacer tout le voyage</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHOIX AJOUT -->
+    <div class="modal fade" id="modalChoix" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:20px;">
+          <div class="modal-header border-0"><h5 class="fw-bold">Ajouter au voyage</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+          <div class="modal-body d-grid gap-2">
+            <button class="btn btn-outline-primary text-start p-3" onclick="startWizard('etapes')" data-bs-dismiss="modal">📍 Une étape</button>
+            <button class="btn btn-outline-info text-start p-3" onclick="startWizard('billets')" data-bs-dismiss="modal">🎟️ Un billet / réservation</button>
+            <button class="btn btn-outline-success text-start p-3" onclick="startWizard('budget')" data-bs-dismiss="modal">💰 Une dépense</button>
+            <button class="btn btn-outline-warning text-start p-3" onclick="startWizard('idees')" data-bs-dismiss="modal">💡 Une idée de sortie</button>
+            <button class="btn btn-outline-secondary text-start p-3" onclick="startWizard('check')" data-bs-dismiss="modal">✅ Un objet à emporter</button>
+            <button class="btn btn-outline-danger text-start p-3" onclick="startWizard('sos')" data-bs-dismiss="modal">🆘 Un contact d'urgence</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- WIZARD -->
+    <div class="modal fade" id="modalWizard" tabindex="-1" data-bs-backdrop="static">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:20px;">
+          <div class="modal-header border-0"><h5 class="fw-bold" id="wizardTitle">…</h5></div>
+          <div class="modal-body" id="wizardBody"></div>
+          <div class="modal-footer border-0">
+            <button type="button" class="btn btn-light" id="btnPrev" onclick="prevStep()">Retour</button>
+            <button type="button" class="btn btn-primary" id="btnNext" onclick="nextStep()">Suivant</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <ul class="nav nav-tabs nav-fill shadow-sm mb-3">
+      <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#etapes">📍 Trajet</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#billets">🎟️ Billets</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#budget">💰 Budget</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#idees">💡 Idées</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#check">✅ Check</button></li>
+      <li class="nav-item"><button class="nav-link text-danger" data-bs-toggle="tab" data-bs-target="#sos">🆘 SOS</button></li>
+    </ul>
+
+    <div class="tab-content container">
+      <div class="tab-pane fade show active" id="etapes">
+        <div class="day-nav shadow-sm">
+          <div class="d-flex justify-content-between align-items-center">
+            <button class="btn btn-outline-primary btn-sm" onclick="changeDay(-1)">◀</button>
+            <h5 id="currentDayTitle" class="mb-0 fw-bold text-center">…</h5>
+            <button class="btn btn-outline-primary btn-sm" onclick="changeDay(1)">▶</button>
+          </div>
+        </div>
+        <div id="dayWeather"></div>
+        <div id="map"></div>
+        <div id="etapesList"></div>
+      </div>
+      <div class="tab-pane fade" id="billets"><div id="billetsList" class="mt-2"></div></div>
+      <div class="tab-pane fade" id="budget">
+        <div class="budget-total shadow-sm"><small>Total dépensé</small><h2 id="totalAmount" class="mb-0">0.00 €</h2></div>
+        <div id="budgetSummary" class="mb-3 text-center"></div>
+        <div id="budgetList"></div>
+      </div>
+      <div class="tab-pane fade" id="idees"><div id="ideesList" class="mt-2"></div></div>
+      <div class="tab-pane fade" id="check"><div id="checkList" class="mt-2"></div></div>
+      <div class="tab-pane fade" id="sos">
+        <div class="card p-3 border-start border-danger border-4 mb-3 text-center">
+          <a href="tel:112" class="btn btn-danger btn-lg w-100 fw-bold shadow">🚨 URGENCE : 112</a>
+        </div>
+        <div id="sosList"></div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+    /* ============ DONNÉES (localStorage) ============ */
+    const STORE_KEY = 'roadbook_data_v1';
+    let allData = loadData();
+    let map, markers = L.layerGroup(), userMarker, userCircle, currentDay = 0;
+    const weatherCache = {};
+
+    function defaultData(){
+      return {
+        title: "MON ROAD TRIP",
+        dateDepart: new Date().toISOString().split('T')[0],
+        etapes: [], billets: [], budget: [], idees: [], checklist: [],
+        sos: [{ nom:"Urgences Europe", numero:"112" }]
+      };
+    }
+    function loadData(){
+      try { const d = JSON.parse(localStorage.getItem(STORE_KEY)); return (d && d.etapes) ? d : defaultData(); }
+      catch(e){ return defaultData(); }
+    }
+    function saveData(){ localStorage.setItem(STORE_KEY, JSON.stringify(allData)); }
+
+    /* ============ DATES ============ */
+    function dateForDay(day){ const d = new Date(allData.dateDepart+'T00:00:00'); d.setDate(d.getDate()+day); return d; }
+    function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+    /* ============ MÉTÉO (Open-Meteo, sans clé) ============ */
+    const WMO = {
+      0:['☀️','Ciel clair'],1:['🌤️','Peu nuageux'],2:['⛅','Nuageux'],3:['☁️','Couvert'],
+      45:['🌫️','Brouillard'],48:['🌫️','Brouillard givrant'],
+      51:['🌦️','Bruine légère'],53:['🌦️','Bruine'],55:['🌧️','Bruine forte'],
+      56:['🌧️','Bruine verglaçante'],57:['🌧️','Bruine verglaçante'],
+      61:['🌦️','Pluie faible'],63:['🌧️','Pluie'],65:['🌧️','Pluie forte'],
+      66:['🌧️','Pluie verglaçante'],67:['🌧️','Pluie verglaçante'],
+      71:['🌨️','Neige faible'],73:['🌨️','Neige'],75:['❄️','Neige forte'],77:['🌨️','Grésil'],
+      80:['🌦️','Averses'],81:['🌧️','Averses'],82:['⛈️','Fortes averses'],
+      85:['🌨️','Averses de neige'],86:['❄️','Averses de neige'],
+      95:['⛈️','Orage'],96:['⛈️','Orage + grêle'],99:['⛈️','Orage + grêle']
+    };
+    async function fetchForecast(lat, lng){
+      const key = lat.toFixed(2)+','+lng.toFixed(2);
+      if (weatherCache[key]) return weatherCache[key];
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}`
+          + `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max`
+          + `&timezone=auto&forecast_days=16`;
+        const r = await fetch(url); const j = await r.json();
+        weatherCache[key] = j; return j;
+      } catch(e){ return null; }
+    }
+    async function renderDayWeather(day){
+      const el = document.getElementById('dayWeather');
+      const loc = allData.etapes.find(e => e.day===day && e.lat && e.lng)
+               || allData.etapes.find(e => e.lat && e.lng);
+      if (!loc){ el.innerHTML=''; return; }
+      const dateStr = ymd(dateForDay(day));
+      const fc = await fetchForecast(loc.lat, loc.lng);
+      if (!fc || !fc.daily){ el.innerHTML=''; return; }
+      const i = fc.daily.time.indexOf(dateStr);
+      if (i < 0){
+        el.innerHTML = `<div class="weather-card text-muted small">🔭 Météo indisponible (prévisions limitées à 16 jours)</div>`;
+        return;
+      }
+      const code = fc.daily.weather_code[i], w = WMO[code] || ['🌡️',''];
+      const tmax = Math.round(fc.daily.temperature_2m_max[i]);
+      const tmin = Math.round(fc.daily.temperature_2m_min[i]);
+      const rain = fc.daily.precipitation_probability_max[i] ?? 0;
+      el.innerHTML = `<div class="weather-card">
+        <div class="d-flex align-items-center justify-content-between">
+          <div><span style="font-size:2rem">${w[0]}</span>
+            <b class="ms-1">${tmax}°</b> <small class="text-muted">/ ${tmin}°</small></div>
+          <div class="text-end"><small>${w[1]}</small><br>
+            <small class="text-primary">💧 ${rain}% de pluie</small></div>
+        </div>
+        <small class="text-muted">📍 ${loc.lieu || ''}</small>
+      </div>`;
+    }
+
+    /* ============ GEOCODAGE (Open-Meteo, sans clé) ============ */
+    async function geocode(q){
+      try {
+        const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=fr&format=json`);
+        const j = await r.json();
+        if (j.results && j.results.length) return { lat:j.results[0].latitude, lng:j.results[0].longitude };
+      } catch(e){}
+      return { lat:null, lng:null };
+    }
+
+    /* ============ ICÔNES AUTO ============ */
+    function getAutoIcon(text, def){
+      const t = String(text).toLowerCase();
+      if (t.match(/bateau|ferry|croisi|traversée/)) return "🚢";
+      if (t.match(/vol|avion|aéroport|décollage/)) return "✈️";
+      if (t.match(/resto|manger|dîner|déjeuner|repas/)) return "🍴";
+      if (t.match(/hôtel|nuit|dodo|airbnb|camping|logement/)) return "🏨";
+      if (t.match(/train|gare|tgv/)) return "🚆";
+      if (t.match(/voiture|location|parking|route|essence/)) return "🚗";
+      if (t.match(/plage|mer|baignade/)) return "🏖️";
+      if (t.match(/rando|marche|montagne|sentier/)) return "🥾";
+      if (t.match(/musée|visite|château|monument/)) return "🏛️";
+      return def;
+    }
+
+    /* ============ RENDU ============ */
+    function refreshAll(){
+      document.getElementById('mainTitle').innerText = allData.title;
+      renderBillets(); renderBudget(); renderIdees(); renderChecklist(); renderSOS();
+      updateCountdown();
+    }
+
+    function renderDay(day){
+      currentDay = day;
+      const d = dateForDay(day);
+      const dateStr = d.toLocaleDateString('fr-FR',{ weekday:'short', day:'numeric', month:'short' });
+      document.getElementById('currentDayTitle').innerHTML = `Jour ${day}<br><small class="text-muted">${dateStr}</small>`;
+
+      const listDiv = document.getElementById('etapesList');
+      listDiv.innerHTML = ''; markers.clearLayers(); let coords = [];
+      const items = allData.etapes.map((e,i)=>({e,i})).filter(x => x.e.day === day);
+
+      if (items.length === 0){
+        listDiv.innerHTML = `<div class="empty"><div class="emo">😴</div>
+          <h5 class="fw-bold text-dark mb-1">Rien de prévu…</h5>
+          <button class="btn btn-sm btn-outline-primary rounded-pill px-4" onclick="startWizard('etapes')">+ Ajouter une étape</button></div>`;
+      } else {
+        items.forEach(({e,i}) => {
+          const hasMap = e.lat && e.lng;
+          const billet = allData.billets.find(b => b.nom && b.nom.toLowerCase().trim() === (e.nom||'').toLowerCase().trim());
+          const bLink = billet
+            ? `<div class="badge-billet" onclick="event.stopPropagation(); openBillet(${allData.billets.indexOf(billet)})">${billet.type==='photo'?'📷 Voir la photo':'🎟️ Billet dispo'}</div>`
+            : '';
+          const clickMap = hasMap ? `onclick="window.open('https://www.google.com/maps/search/?api=1&query=${e.lat},${e.lng}','_blank')"` : '';
+          listDiv.innerHTML += `<div class="card p-3 border-start border-primary border-4 shadow-sm mb-2">
+            <div class="d-flex justify-content-between align-items-start">
+              <div style="flex:1; ${hasMap?'cursor:pointer':''}" ${clickMap}>
+                <h6 class="mb-1">${getAutoIcon(e.nom,'📍')} ${esc(e.nom)}</h6>
+                <small class="text-muted">${esc(e.detail||'')}</small><br>${bLink}
+              </div>
+              <button class="btn btn-sm btn-light text-danger" onclick="del('etapes',${i})">🗑️</button>
+            </div></div>`;
+          if (hasMap){ L.marker([e.lat,e.lng]).addTo(markers); coords.push([e.lat,e.lng]); }
+        });
+      }
+      if (coords.length) map.fitBounds(coords,{ padding:[50,50], maxZoom:12 });
+      renderDayWeather(day);
+    }
+
+    function renderBillets(){
+      const el = document.getElementById('billetsList');
+      if (!allData.billets.length){ el.innerHTML = emptyBox('🎟️','Aucun billet','billets','info'); return; }
+      el.innerHTML = allData.billets.map((b,i)=>{
+        const isPhoto = b.type==='photo';
+        return `<div class="card p-3 border-start border-info border-4 shadow-sm mb-2" style="cursor:pointer" onclick="openBillet(${i})">
+          <div class="d-flex justify-content-between align-items-center">
+            <div style="flex:1"><b style="font-size:1.05rem">🎟️ ${esc(b.nom)}</b><br>
+              <small class="${isPhoto?'text-primary fw-bold':'text-muted'}">${isPhoto?'📷 Voir la photo':'Ouvrir le lien ➔'}</small></div>
+            <button class="btn btn-sm text-danger" onclick="event.stopPropagation(); del('billets',${i})">🗑️</button>
+          </div></div>`;
+      }).join('');
+    }
+    function openBillet(i){
+      const b = allData.billets[i]; if (!b) return;
+      const w = window.open(); 
+      if (b.type==='photo'){ w.document.write(`<img src="${b.value}" style="max-width:100%">`); }
+      else { w.location = b.value.startsWith('http') ? b.value : 'https://'+b.value; }
+    }
+
+    function renderBudget(){
+      let total = 0, payers = {};
+      const rows = allData.budget.map((b,i)=>{
+        total += b.montant; payers[b.qui||'?'] = (payers[b.qui||'?']||0) + b.montant;
+        return `<div class="card p-3 border-start border-success border-4 mb-2 shadow-sm">
+          <div class="d-flex justify-content-between align-items-center">
+            <div><b>${esc(b.objet)}</b><br><small class="text-muted">${esc(b.qui||'?')}</small></div>
+            <div class="text-end"><b>${b.montant.toFixed(2)}€</b>
+              <button class="btn btn-sm text-danger" onclick="del('budget',${i})">🗑️</button></div>
+          </div></div>`;
+      }).join('');
+      document.getElementById('totalAmount').innerText = total.toFixed(2)+' €';
+      document.getElementById('budgetList').innerHTML = rows || emptyBox('💰','Aucune dépense','budget','success');
+      let resume = '';
+      for (const p in payers) resume += `<span class="badge bg-white text-dark border m-1">${esc(p)} : ${payers[p].toFixed(2)}€</span>`;
+      document.getElementById('budgetSummary').innerHTML = resume;
+    }
+
+    function renderIdees(){
+      const el = document.getElementById('ideesList');
+      if (!allData.idees.length){ el.innerHTML = emptyBox('💡','Aucune idée','idees','warning'); return; }
+      el.innerHTML = allData.idees.map((x,i)=>
+        `<div class="card p-3 border-start border-warning border-4 shadow-sm mb-2">
+          <div class="d-flex justify-content-between align-items-center">
+            <div style="flex:1"><b>${getAutoIcon(x.lieu,'💡')} ${esc(x.lieu)}</b><br>
+              <small class="text-muted">${esc(x.note||'')}</small></div>
+            <button class="btn btn-sm text-danger" onclick="del('idees',${i})">🗑️</button>
+          </div></div>`).join('');
+    }
+
+    function renderChecklist(){
+      const el = document.getElementById('checkList');
+      if (!allData.checklist.length){ el.innerHTML = emptyBox('✅','Valise vide ?','check','secondary'); return; }
+      el.innerHTML = allData.checklist.map((c,i)=>
+        `<div class="check-item ${c.fait?'done':''}">
+          <input type="checkbox" ${c.fait?'checked':''} onchange="toggleCheck(${i})">
+          <span style="flex:1">${esc(c.objet)}</span>
+          <button class="btn btn-sm text-danger" onclick="del('checklist',${i})">🗑️</button>
+        </div>`).join('');
+    }
+
+    function renderSOS(){
+      const el = document.getElementById('sosList');
+      el.innerHTML = allData.sos.map((s,i)=>
+        `<div class="card p-3 border-start border-danger border-4 shadow-sm mb-2">
+          <div class="d-flex justify-content-between align-items-center">
+            <div><b>📞 ${esc(s.nom)}</b><br><small class="text-muted">${esc(s.numero)}</small></div>
+            <div class="d-flex align-items-center gap-2">
+              <a href="tel:${esc(s.numero)}" class="btn btn-danger btn-sm rounded-pill px-3">Appeler</a>
+              <button class="btn btn-sm text-danger" onclick="del('sos',${i})">🗑️</button>
+            </div>
+          </div></div>`).join('');
+    }
+
+    function emptyBox(emo, txt, type, color){
+      return `<div class="empty"><div class="emo">${emo}</div>
+        <h5 class="fw-bold text-dark mb-1">${txt}</h5>
+        <button class="btn btn-sm btn-outline-${color} rounded-pill px-4" onclick="startWizard('${type}')">+ Ajouter</button></div>`;
+    }
+    function esc(s){ return String(s??'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+    /* ============ ACTIONS ============ */
+    function del(arr, i){
+      if (confirm('Supprimer ?')){ allData[arr].splice(i,1); saveData(); refreshAll(); renderDay(currentDay); }
+    }
+    function toggleCheck(i){ allData.checklist[i].fait = !allData.checklist[i].fait; saveData(); renderChecklist(); }
+    function changeDay(dir){ if (currentDay+dir >= 0) renderDay(currentDay+dir); }
+
+    /* ============ WIZARD ============ */
+    const WIZ = {
+      etapes:{ title:"Nouvelle étape", target:'etapes', fields:[
+        {k:'date',label:'Quel jour ?',type:'date'},
+        {k:'nom',label:'Activité',type:'text'},
+        {k:'detail',label:'Heure / détail',type:'text'},
+        {k:'lieu',label:'Lieu (ville)',type:'text'} ]},
+      billets:{ title:"Nouveau billet", target:'billets', fields:[
+        {k:'nom',label:'Nom (identique au nom de l\'étape pour le lier)',type:'text'},
+        {k:'value',label:'Lien ou photo',type:'linkfile'} ]},
+      budget:{ title:"Nouvelle dépense", target:'budget', fields:[
+        {k:'objet',label:'Objet',type:'text'},
+        {k:'montant',label:'Montant (€)',type:'number'},
+        {k:'qui',label:'Qui a payé ?',type:'text'} ]},
+      idees:{ title:"Nouvelle idée", target:'idees', fields:[
+        {k:'lieu',label:'Lieu / activité',type:'text'},
+        {k:'note',label:'Note',type:'text'} ]},
+      check:{ title:"À emporter", target:'checklist', fields:[
+        {k:'objet',label:'Objet',type:'text'} ]},
+      sos:{ title:"Contact d'urgence", target:'sos', fields:[
+        {k:'nom',label:'Nom du contact',type:'text'},
+        {k:'numero',label:'Numéro',type:'text'} ]}
+    };
+    let wizard = { type:'', step:0, values:{} };
+
+    function startWizard(t){ wizard = { type:t, step:0, values:{} }; drawWizard(); new bootstrap.Modal(document.getElementById('modalWizard')).show(); }
+
+    function drawWizard(){
+      const cfg = WIZ[wizard.type];
+      const f = cfg.fields[wizard.step];
+      document.getElementById('wizardTitle').innerText = cfg.title;
+      let html = `<label class="small text-muted">${f.label}</label>`;
+      const prev = wizard.values[f.k] || '';
+
+      if (f.type === 'date'){
+        const def = wizard.values[f.k] || ymd(dateForDay(currentDay));
+        html += `<input type="date" id="wizInput" class="form-control form-control-lg" value="${def}">`;
+      } else if (f.type === 'number'){
+        html += `<input type="number" inputmode="decimal" step="0.01" id="wizInput" class="form-control form-control-lg" value="${prev}">`;
+      } else if (f.type === 'linkfile'){
+        html += `<input type="text" id="wizInput" class="form-control mb-2" placeholder="Coller un lien http…" value="${prev.startsWith('data:')?'':prev}">
+                 <div class="text-center my-2 text-muted small">OU</div>
+                 <input type="file" id="wizFile" class="form-control" accept="image/*">
+                 <div class="small text-muted mt-1">Photo compressée pour tenir sur l'appareil.</div>`;
+      } else {
+        html += `<input type="text" id="wizInput" class="form-control form-control-lg" value="${esc(prev)}" autocomplete="off">`;
+      }
+      document.getElementById('wizardBody').innerHTML = html;
+      document.getElementById('btnPrev').style.visibility = wizard.step===0 ? 'hidden' : 'visible';
+      document.getElementById('btnNext').innerText = wizard.step===cfg.fields.length-1 ? 'Terminer' : 'Suivant';
+      document.getElementById('btnNext').disabled = false;
+      setTimeout(()=>{ const el=document.getElementById('wizInput'); if(el && wizard.step>0) el.focus(); }, 150);
+    }
+
+    async function captureStep(){
+      const cfg = WIZ[wizard.type]; const f = cfg.fields[wizard.step];
+      if (f.type === 'linkfile'){
+        const file = document.getElementById('wizFile').files[0];
+        if (file){ wizard.values[f.k] = await compressImage(file, 900, 0.6); wizard.values._photo = true; }
+        else { wizard.values[f.k] = document.getElementById('wizInput').value.trim(); wizard.values._photo = false; }
+      } else {
+        wizard.values[f.k] = document.getElementById('wizInput').value;
+      }
+    }
+
+    async function nextStep(){
+      const cfg = WIZ[wizard.type];
+      await captureStep();
+      if (wizard.step < cfg.fields.length-1){ wizard.step++; drawWizard(); }
+      else { await finishWizard(); }
+    }
+    function prevStep(){ if (wizard.step>0){ wizard.step--; drawWizard(); } }
+
+    async function finishWizard(){
+      const btn = document.getElementById('btnNext'); btn.disabled = true; btn.innerText = '…';
+      const v = wizard.values;
+      if (wizard.type === 'etapes'){
+        const diff = Math.round((new Date(v.date+'T00:00:00') - new Date(allData.dateDepart+'T00:00:00'))/86400000);
+        const g = v.lieu ? await geocode(v.lieu) : {lat:null,lng:null};
+        allData.etapes.push({ day:diff, nom:v.nom||'Activité', detail:v.detail||'', lieu:v.lieu||'', lat:g.lat, lng:g.lng });
+      } else if (wizard.type === 'billets'){
+        allData.billets.push({ nom:v.nom||'Billet', type:v._photo?'photo':'link', value:v.value||'' });
+      } else if (wizard.type === 'budget'){
+        allData.budget.push({ objet:v.objet||'Dépense', montant:parseFloat(String(v.montant).replace(',','.'))||0, qui:v.qui||'' });
+      } else if (wizard.type === 'idees'){
+        allData.idees.push({ lieu:v.lieu||'', note:v.note||'' });
+      } else if (wizard.type === 'check'){
+        allData.checklist.push({ objet:v.objet||'', fait:false });
+      } else if (wizard.type === 'sos'){
+        allData.sos.push({ nom:v.nom||'', numero:v.numero||'' });
+      }
+      saveData();
+      bootstrap.Modal.getInstance(document.getElementById('modalWizard')).hide();
+      refreshAll(); renderDay(currentDay);
+    }
+
+    function compressImage(file, maxW, quality){
+      return new Promise(res => {
+        const fr = new FileReader();
+        fr.onload = e => {
+          const img = new Image();
+          img.onload = () => {
+            const c = document.createElement('canvas');
+            let w = img.width, h = img.height;
+            if (w > maxW){ h = Math.round(h*maxW/w); w = maxW; }
+            c.width = w; c.height = h;
+            c.getContext('2d').drawImage(img, 0, 0, w, h);
+            res(c.toDataURL('image/jpeg', quality));
+          };
+          img.src = e.target.result;
+        };
+        fr.readAsDataURL(file);
+      });
+    }
+
+    /* ============ CONFIG / SAUVEGARDE ============ */
+    function openConfig(){
+      document.getElementById('cfgTitle').value = allData.title;
+      document.getElementById('cfgDate').value = allData.dateDepart;
+      new bootstrap.Modal(document.getElementById('modalConfig')).show();
+    }
+    function saveConfig(){
+      const t = document.getElementById('cfgTitle').value.trim();
+      const d = document.getElementById('cfgDate').value;
+      if (t) allData.title = t;
+      if (d) allData.dateDepart = d;
+      saveData();
+      bootstrap.Modal.getInstance(document.getElementById('modalConfig')).hide();
+      refreshAll(); renderDay(0);
+    }
+    function resetTrip(){
+      if (confirm("Effacer TOUT le voyage ? (pense à exporter avant)")){
+        allData = defaultData(); saveData();
+        bootstrap.Modal.getInstance(document.getElementById('modalConfig')).hide();
+        refreshAll(); renderDay(0);
+      }
+    }
+    function exportData(){
+      const blob = new Blob([JSON.stringify(allData,null,2)], {type:'application/json'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'roadbook-'+(allData.title||'voyage').replace(/\s+/g,'_')+'.json';
+      a.click();
+    }
+    function importData(input){
+      const file = input.files[0]; if (!file) return;
+      const fr = new FileReader();
+      fr.onload = e => {
+        try {
+          const d = JSON.parse(e.target.result);
+          if (!d.etapes) throw 0;
+          allData = d; saveData();
+          bootstrap.Modal.getInstance(document.getElementById('modalConfig')).hide();
+          refreshAll(); renderDay(0);
+          alert("Voyage importé ✅");
+        } catch(err){ alert("Fichier invalide."); }
+      };
+      fr.readAsText(file);
+    }
+
+    /* ============ DIVERS ============ */
+    function updateCountdown(){
+      const jours = Math.ceil((new Date(allData.dateDepart+'T00:00:00') - new Date().setHours(0,0,0,0))/86400000);
+      document.getElementById('countdown').innerHTML =
+        jours > 0 ? `✈️ Départ dans <b>${jours} jour${jours>1?'s':''}</b> !`
+        : (jours === 0 ? `🎉 C'est le grand jour !` : `🧳 Voyage en cours / terminé`);
+    }
+
+    /* ============ INIT ============ */
+    window.addEventListener('load', () => {
+      map = L.map('map').setView([46.8, 2.5], 5);
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        { attribution:'Tiles © Esri' }).addTo(map);
+      markers.addTo(map);
+
+      map.locate({ setView:false, watch:true });
+      map.on('locationfound', e => {
+        if (userMarker){ userMarker.setLatLng(e.latlng); userCircle.setLatLng(e.latlng).setRadius(e.accuracy/2); }
+        else {
+          userMarker = L.marker(e.latlng, { icon: L.divIcon({ className:'user-loc',
+            html:'<div style="background:#007bff;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 5px rgba(0,0,0,.5)"></div>', iconSize:[12,12] }) }).addTo(map);
+          userCircle = L.circle(e.latlng, e.accuracy/2, { fillOpacity:.1, stroke:false }).addTo(map);
+        }
+      });
+
+      refreshAll();
+      renderDay(0);
+
+      if ('serviceWorker' in navigator){
+        navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+      }
+    });
+    </script>
+  </body>
+</html>
