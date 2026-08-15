@@ -34,7 +34,8 @@
       .check-item input { margin-right:15px; transform:scale(1.3); }
       .check-item.done span { text-decoration:line-through; color:#adb5bd; }
       .day-nav { background:#fff; padding:12px; border-radius:15px; margin-bottom:15px; }
-      #countdown { background:linear-gradient(90deg,#007bff,#00c6ff); color:#fff; border-radius:12px; padding:12px; margin:10px; text-align:center; font-weight:bold; font-size:1.1rem; }
+      #countdown { background:linear-gradient(90deg,#007bff,#00c6ff); color:#fff; border-radius:12px; padding:12px; margin:10px; text-align:center; font-weight:bold; font-size:1.1rem; max-height:120px; overflow:hidden; transition:opacity .6s ease, max-height .6s ease, padding .6s ease, margin .6s ease; }
+      #countdown.cd-hide { opacity:0; max-height:0; padding-top:0; padding-bottom:0; margin-top:0; margin-bottom:0; }
       .weather-card { background:#fff; border-radius:15px; padding:14px 16px; margin-bottom:15px; box-shadow:0 2px 4px rgba(0,0,0,.05); border-left:4px solid #00c6ff; }
       .badge-billet { background:#e7f3ff; color:#007bff; font-size:.7rem; padding:3px 8px; border-radius:5px; font-weight:bold; display:inline-block; margin-top:5px; border:1px solid #007bff; cursor:pointer; }
       .budget-total { background:#198754; color:#fff; border-radius:15px; padding:15px; margin-bottom:15px; text-align:center; }
@@ -43,7 +44,7 @@
       .avatar-sm { width:34px; height:34px; border-radius:50%; object-fit:cover; }
       .chip { border:1px solid #ced4da; background:#fff; border-radius:20px; padding:5px 12px; font-size:.85rem; cursor:pointer; }
       .chip.active { background:#007bff; color:#fff; border-color:#007bff; }
-      .num-pin { background:transparent; border:none; }
+      .num-pin, .act-pin { background:transparent; border:none; }
     </style>
   </head>
   <body>
@@ -459,6 +460,7 @@
       { key:'courses', label:'🛒 Courses' }, { key:'voir', label:'🏛️ Voir' }, { key:'dormir', label:'🏨 Dormir' },
       { key:'sante', label:'💊 Santé' }, { key:'argent', label:'🏧 Argent' }
     ];
+    const NEARBY_TO_TYPE = { manger:'resto', dormir:'hotel', voir:'visite', essence:'transport', courses:'poi', sante:'poi', argent:'poi', autre:'poi' };
     function renderChips(){
       document.getElementById('nearbyChips').innerHTML = CATS.map(c =>
         `<span class="chip ${nearbyCat===c.key?'active':''}" onclick="nearbyCat='${c.key}'; renderChips(); renderNearbyList()">${c.label}</span>`).join('');
@@ -530,7 +532,7 @@
     }
     function addNearbyStep(i){
       const r = nearbyShown[i]; if (!r) return;
-      allData.etapes.push({ day:currentDay, nom:r.name, detail:'', lieu:r.name, lat:r.lat, lng:r.lng });
+      allData.etapes.push({ day:currentDay, nom:r.name, detail:'', lieu:r.name, lat:r.lat, lng:r.lng, type:(NEARBY_TO_TYPE[r.cat]||'poi') });
       saveData(); refreshAll(); renderDay(currentDay);
       alert(`Ajouté au trajet · Jour ${currentDay} 📍`);
     }
@@ -548,6 +550,43 @@
     }
     function goLink(lat,lng){
       return `<a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank" style="display:inline-block;margin-top:6px;padding:5px 12px;background:#007bff;color:#fff;border-radius:8px;text-decoration:none;font-size:.85rem;font-weight:bold">🧭 S'y rendre</a>`;
+    }
+    const ETAPE_TYPES = {
+      auto:      { label:"✨ Auto (selon le nom)" },
+      resto:     { label:"🍴 Repas / bar",       emo:'🍴', color:'#e67e22' },
+      hotel:     { label:"🏨 Logement",          emo:'🏨', color:'#8e44ad' },
+      plage:     { label:"🏖️ Plage",             emo:'🏖️', color:'#00b8d4' },
+      rando:     { label:"🥾 Rando",             emo:'🥾', color:'#27ae60' },
+      visite:    { label:"🏛️ Visite",            emo:'🏛️', color:'#795548' },
+      transport: { label:"🚗 Transport",         emo:'🚗', color:'#2c3e50' },
+      avion:     { label:"✈️ Avion",             emo:'✈️', color:'#0097e6' },
+      bateau:    { label:"🚢 Bateau",            emo:'🚢', color:'#273c75' },
+      poi:       { label:"📍 Point d'intérêt",   emo:'📍', color:'#007bff' }
+    };
+    function activityStyle(name){
+      const t = String(name).toLowerCase();
+      if (t.match(/resto|manger|dîner|déjeuner|repas|bar|café|brasserie/)) return { emo:'🍴', color:'#e67e22' };
+      if (t.match(/hôtel|hotel|nuit|dodo|airbnb|camping|logement|dormir|gîte/)) return { emo:'🏨', color:'#8e44ad' };
+      if (t.match(/plage|mer|baignade|calanque|crique|cala/)) return { emo:'🏖️', color:'#00b8d4' };
+      if (t.match(/rando|marche|montagne|sentier|balade|trek/)) return { emo:'🥾', color:'#27ae60' };
+      if (t.match(/musée|visite|château|monument|église|cathédrale|expo/)) return { emo:'🏛️', color:'#795548' };
+      if (t.match(/vol|avion|aéroport|décollage/)) return { emo:'✈️', color:'#0097e6' };
+      if (t.match(/bateau|ferry|croisi|traversée/)) return { emo:'🚢', color:'#273c75' };
+      if (t.match(/train|gare|tgv/)) return { emo:'🚆', color:'#c0392b' };
+      if (t.match(/voiture|location|parking|route|essence|péage/)) return { emo:'🚗', color:'#2c3e50' };
+      return { emo:'📍', color:'#007bff' };
+    }
+    function styleForEtape(e){
+      const ty = ETAPE_TYPES[e.type];
+      if (e.type && e.type !== 'auto' && ty && ty.color) return { emo:ty.emo, color:ty.color };
+      return activityStyle(e.nom);
+    }
+    function pinIcon(emo, color, faded){
+      return L.divIcon({ className:'act-pin', iconSize:[34,34], iconAnchor:[17,34], popupAnchor:[0,-32],
+        html:`<div style="opacity:${faded?0.45:1};width:34px;height:34px;position:relative">
+          <div style="background:${color};width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);position:absolute;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>
+          <div style="position:absolute;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:16px">${emo}</div>
+        </div>` });
     }
     function initFullMap(){
       if (fullMap){ setTimeout(()=>{ fullMap.invalidateSize(); renderFullMap(); }, 120); return; }
@@ -717,20 +756,30 @@
       const dateStr = d.toLocaleDateString('fr-FR',{ weekday:'short', day:'numeric', month:'short' });
       document.getElementById('currentDayTitle').innerHTML = `Jour ${day}<br><small class="text-muted">${dateStr}</small>`;
       const listDiv = document.getElementById('etapesList');
-      listDiv.innerHTML = ''; markers.clearLayers(); let coords = [];
+      markers.clearLayers(); let coords = [];
       const items = allData.etapes.map((e,i)=>({e,i})).filter(x => x.e.day === day);
       if (!items.length){
         listDiv.innerHTML = `<div class="empty"><div class="emo">😴</div><h5 class="fw-bold text-dark mb-1">Rien de prévu…</h5><button class="btn btn-sm btn-outline-primary rounded-pill px-4" onclick="startWizard('etapes')">+ Ajouter une étape</button></div>`;
       } else {
-        items.forEach(({e,i}) => {
-          const hasMap = e.lat && e.lng;
+        const card = ({e,i}, done) => {
           const billet = allData.billets.find(b => b.nom && b.nom.toLowerCase().trim() === (e.nom||'').toLowerCase().trim());
           const bLink = billet ? `<div class="badge-billet" onclick="event.stopPropagation(); openBillet(${allData.billets.indexOf(billet)})">${billet.type==='photo'?'📷 Voir la photo':'🎟️ Billet dispo'}</div>` : '';
+          if (done){
+            return `<div class="card p-3 border-start border-secondary border-4 shadow-sm mb-2" style="opacity:.5"><div class="d-flex justify-content-between align-items-start"><div style="flex:1"><h6 class="mb-1" style="text-decoration:line-through">${styleForEtape(e).emo} ${esc(e.nom)}</h6></div><div class="d-flex flex-column gap-1"><button class="btn btn-sm btn-outline-secondary" onclick="toggleVuEtape(${i})" title="Remettre à faire">↩️</button><button class="btn btn-sm text-danger" onclick="del('etapes',${i})">🗑️</button></div></div></div>`;
+          }
+          const hasMap = e.lat && e.lng;
           const clickMap = hasMap ? `onclick="window.open('https://www.google.com/maps/search/?api=1&query=${e.lat},${e.lng}','_blank')"` : '';
-          listDiv.innerHTML += `<div class="card p-3 border-start border-primary border-4 shadow-sm mb-2"><div class="d-flex justify-content-between align-items-start"><div style="flex:1; ${hasMap?'cursor:pointer':''}" ${clickMap}><h6 class="mb-1">${getAutoIcon(e.nom,'📍')} ${esc(e.nom)}</h6><small class="text-muted">${esc(e.detail||'')}</small><br>${bLink}</div><button class="btn btn-sm btn-light text-danger" onclick="del('etapes',${i})">🗑️</button></div></div>`;
-          if (hasMap){
-            L.marker([e.lat,e.lng]).addTo(markers)
-              .bindPopup(`<b>${getAutoIcon(e.nom,'📍')} ${esc(e.nom)}</b>${e.detail?`<br><small>${esc(e.detail)}</small>`:''}<br>${goLink(e.lat,e.lng)}`);
+          return `<div class="card p-3 border-start border-primary border-4 shadow-sm mb-2"><div class="d-flex justify-content-between align-items-start"><div style="flex:1; ${hasMap?'cursor:pointer':''}" ${clickMap}><h6 class="mb-1">${styleForEtape(e).emo} ${esc(e.nom)}</h6><small class="text-muted">${esc(e.detail||'')}</small><br>${bLink}</div><div class="d-flex flex-column gap-1"><button class="btn btn-sm btn-outline-success" onclick="toggleVuEtape(${i})" title="Marquer comme fait">✓</button><button class="btn btn-sm btn-light text-danger" onclick="del('etapes',${i})">🗑️</button></div></div></div>`;
+        };
+        const todo = items.filter(o=>!o.e.vu), done = items.filter(o=>o.e.vu);
+        let html = todo.map(o=>card(o,false)).join('');
+        if (done.length) html += `<div class="text-muted small mt-3 mb-1">Fait (${done.length})</div>` + done.map(o=>card(o,true)).join('');
+        listDiv.innerHTML = html;
+        items.forEach(({e}) => {
+          if (e.lat && e.lng){
+            const st = styleForEtape(e);
+            L.marker([e.lat,e.lng], { icon: pinIcon(st.emo, st.color, e.vu) }).addTo(markers)
+              .bindPopup(`<b>${st.emo} ${esc(e.nom)}</b>${e.detail?`<br><small>${esc(e.detail)}</small>`:''}<br>${goLink(e.lat,e.lng)}`);
             coords.push([e.lat,e.lng]);
           }
         });
@@ -738,6 +787,7 @@
       if (coords.length) map.fitBounds(coords,{ padding:[50,50], maxZoom:12 });
       renderDayWeather(day);
     }
+    function toggleVuEtape(i){ allData.etapes[i].vu = !allData.etapes[i].vu; saveData(); renderDay(currentDay); }
     function renderBillets(){
       const el = document.getElementById('billetsList');
       if (!allData.billets.length){ el.innerHTML = emptyBox('🎟️','Aucun billet','billets','info'); return; }
@@ -769,7 +819,7 @@
       const rows = allData.idees.map((x,i)=>({x,i}));
       const todo = rows.filter(o => !o.x.vu);
       const done = rows.filter(o => o.x.vu);
-      const cardTodo = ({x,i}) => `<div class="card p-3 border-start border-warning border-4 shadow-sm mb-2"><div class="d-flex justify-content-between align-items-center"><div style="flex:1"><b>${getAutoIcon(x.lieu,'💡')} ${esc(x.lieu)}</b><br><small class="text-muted">${esc(x.note||'')}</small></div><div class="d-flex gap-1"><button class="btn btn-sm btn-outline-success" onclick="toggleVu(${i})" title="Marquer comme vu">✓ Vu</button><button class="btn btn-sm text-danger" onclick="del('idees',${i})">🗑️</button></div></div></div>`;
+      const cardTodo = ({x,i}) => `<div class="card p-3 border-start border-warning border-4 shadow-sm mb-2"><div class="d-flex justify-content-between align-items-center"><div style="flex:1"><b>${getAutoIcon(x.lieu,'💡')} ${esc(x.lieu)}</b><br><small class="text-muted">${esc(x.note||'')}</small></div><div class="d-flex gap-1"><a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(x.lieu)}" target="_blank" class="btn btn-sm btn-outline-primary" title="S'y rendre">🧭</a><button class="btn btn-sm btn-outline-success" onclick="toggleVu(${i})" title="Marquer comme vu">✓</button><button class="btn btn-sm text-danger" onclick="del('idees',${i})">🗑️</button></div></div></div>`;
       const cardDone = ({x,i}) => `<div class="card p-3 border-start border-secondary border-4 shadow-sm mb-2" style="opacity:.5"><div class="d-flex justify-content-between align-items-center"><div style="flex:1"><b style="text-decoration:line-through">${esc(x.lieu)}</b> <span class="badge bg-success">vu</span></div><div class="d-flex gap-1"><button class="btn btn-sm btn-outline-secondary" onclick="toggleVu(${i})" title="Remettre à faire">↩️</button><button class="btn btn-sm text-danger" onclick="del('idees',${i})">🗑️</button></div></div></div>`;
       let html = todo.map(cardTodo).join('');
       if (done.length){ html += `<div class="text-muted small mt-3 mb-1">Déjà vu (${done.length})</div>` + done.map(cardDone).join(''); }
@@ -795,7 +845,7 @@
 
     /* ============ WIZARD ============ */
     const WIZ = {
-      etapes:{ title:"Nouvelle étape", fields:[{k:'date',label:'Quel jour ?',type:'date'},{k:'nom',label:'Activité',type:'text'},{k:'detail',label:'Heure / détail',type:'text'},{k:'lieu',label:'Lieu (ville)',type:'text'}]},
+      etapes:{ title:"Nouvelle étape", fields:[{k:'date',label:'Quel jour ?',type:'date'},{k:'nom',label:'Activité',type:'text'},{k:'detail',label:'Heure / détail',type:'text'},{k:'lieu',label:'Lieu (ville)',type:'text'},{k:'type',label:"Type (icône sur la carte)",type:'select',options:ETAPE_TYPES}]},
       billets:{ title:"Nouveau billet", fields:[{k:'nom',label:"Nom (identique à l'étape pour le lier)",type:'text'},{k:'value',label:'Lien ou photo',type:'linkfile'}]},
       budget:{ title:"Nouvelle dépense", fields:[{k:'objet',label:'Objet',type:'text'},{k:'montant',label:'Montant (€)',type:'number'},{k:'qui',label:'Qui a payé ?',type:'text'}]},
       idees:{ title:"Nouvelle idée", fields:[{k:'lieu',label:'Lieu / activité',type:'text'},{k:'note',label:'Note',type:'text'}]},
@@ -812,6 +862,7 @@
       if (f.type==='date'){ const def = wizard.values[f.k] || ymd(dateForDay(currentDay)); html += `<input type="date" id="wizInput" class="form-control form-control-lg" value="${def}">`; }
       else if (f.type==='number'){ html += `<input type="number" inputmode="decimal" step="0.01" id="wizInput" class="form-control form-control-lg" value="${prev}">`; }
       else if (f.type==='linkfile'){ html += `<input type="text" id="wizInput" class="form-control mb-2" placeholder="Coller un lien http…" value="${String(prev).startsWith('data:')?'':esc(prev)}"><div class="text-center my-2 text-muted small">OU</div><input type="file" id="wizFile" class="form-control" accept="image/*"><div class="small text-muted mt-1">Photo compressée. En voyage partagé, préfère un lien si tu as beaucoup de billets.</div>`; }
+      else if (f.type==='select'){ html += `<select id="wizInput" class="form-select form-select-lg">${Object.entries(f.options).map(([v,o])=>`<option value="${v}" ${prev===v?'selected':''}>${o.label}</option>`).join('')}</select>`; }
       else { html += `<input type="text" id="wizInput" class="form-control form-control-lg" value="${esc(prev)}" autocomplete="off">`; }
       document.getElementById('wizardBody').innerHTML = html;
       document.getElementById('btnPrev').style.visibility = wizard.step===0 ? 'hidden':'visible';
@@ -840,7 +891,7 @@
       if (wizard.type==='etapes'){
         const diff = Math.round((new Date(v.date+'T00:00:00') - new Date(allData.dateDepart+'T00:00:00'))/86400000);
         const g = v.lieu ? await geocode(v.lieu) : {lat:null,lng:null};
-        allData.etapes.push({ day:diff, nom:v.nom||'Activité', detail:v.detail||'', lieu:v.lieu||'', lat:g.lat, lng:g.lng });
+        allData.etapes.push({ day:diff, nom:v.nom||'Activité', detail:v.detail||'', lieu:v.lieu||'', lat:g.lat, lng:g.lng, type:v.type||'auto' });
       } else if (wizard.type==='billets'){ allData.billets.push({ nom:v.nom||'Billet', type:v._photo?'photo':'link', value:v.value||'' }); }
       else if (wizard.type==='budget'){ allData.budget.push({ objet:v.objet||'Dépense', montant:parseFloat(String(v.montant).replace(',','.'))||0, qui:v.qui||'' }); }
       else if (wizard.type==='idees'){ allData.idees.push({ lieu:v.lieu||'', note:v.note||'' }); }
@@ -909,6 +960,9 @@
       const jours = Math.ceil((new Date(allData.dateDepart+'T00:00:00') - new Date().setHours(0,0,0,0))/86400000);
       document.getElementById('countdown').innerHTML = jours>0 ? `✈️ Départ dans <b>${jours} jour${jours>1?'s':''}</b> !` : (jours===0 ? `🎉 C'est le grand jour !` : `🧳 Voyage en cours / terminé`);
     }
+    function scheduleCountdownHide(){
+      setTimeout(() => { const c = document.getElementById('countdown'); if (c) c.classList.add('cd-hide'); }, 4500);
+    }
 
     /* ============ INIT ============ */
     function bootApp(){
@@ -918,6 +972,7 @@
       if (savedCode && db){ shareMode = true; shareCode = savedCode; listen(savedCode); }
       else { allData = loadData(); refreshAll(); renderDay(0); }
       updateModeBadge();
+      scheduleCountdownHide();
     }
     window.addEventListener('load', () => {
       map = L.map('map').setView([46.8,2.5],5);
