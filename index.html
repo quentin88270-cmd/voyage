@@ -195,6 +195,10 @@
 
       <div class="tab-pane fade" id="autour">
         <div id="nearbyChips" class="d-flex gap-1 flex-wrap mb-2"></div>
+        <div class="d-flex align-items-center gap-1 flex-wrap mb-2">
+          <small class="text-muted me-1">Rayon :</small>
+          <span id="nearbyRadiusChips" class="d-flex gap-1 flex-wrap"></span>
+        </div>
         <button class="btn btn-primary w-100 mb-2" onclick="findNearby()">📍 Chercher autour de moi</button>
         <div id="nearbyStatus" class="text-center text-muted small mb-2"></div>
         <div id="nearbyList"></div>
@@ -247,7 +251,7 @@
     let db = null, unsub = null, writeTimer = null;
     let map, markers = L.layerGroup(), userMarker, userCircle, currentDay = 0;
     const weatherCache = {};
-    let nearbyResults = [], nearbyPos = null, nearbyCat = 'tout';
+    let nearbyResults = [], nearbyShown = [], nearbyPos = null, nearbyCat = 'tout', nearbyRadius = 1600;
 
     /* ============ PROFIL ============ */
     function loadProfile(){ try { return JSON.parse(localStorage.getItem(PROFILE_KEY)) || null; } catch(e){ return null; } }
@@ -472,44 +476,67 @@
       return ['autre','📌'];
     }
     function distM(a,b,c,d){ const R=6371000,p=Math.PI/180; const dLa=(c-a)*p,dLo=(d-b)*p; const x=Math.sin(dLa/2)**2+Math.cos(a*p)*Math.cos(c*p)*Math.sin(dLo/2)**2; return Math.round(R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))); }
+    const RADII = [1000,3000,5000,10000,20000];
+    function fmtRad(m){ return (m/1000)+' km'; }
+    function renderRadiusChips(){
+      document.getElementById('nearbyRadiusChips').innerHTML = RADII.map(m =>
+        `<span class="chip ${nearbyRadius===m?'active':''}" onclick="setRadius(${m})">${fmtRad(m)}</span>`).join('');
+    }
+    function setRadius(m){ nearbyRadius = m; renderRadiusChips(); if (nearbyPos) searchAround(); }
+
     function findNearby(){
       const status = document.getElementById('nearbyStatus');
       status.innerHTML = '📡 Localisation en cours…';
       if (!navigator.geolocation){ status.innerHTML = 'Géolocalisation non disponible.'; return; }
-      navigator.geolocation.getCurrentPosition(async pos => {
-        const lat = pos.coords.latitude, lng = pos.coords.longitude;
-        nearbyPos = { lat, lng }; status.innerHTML = '🔎 Recherche des lieux autour de toi…';
-        const q = `[out:json][timeout:25];(node["amenity"~"restaurant|cafe|fast_food|bar|pub|fuel|pharmacy|bank|atm"](around:1600,${lat},${lng});node["tourism"~"attraction|viewpoint|museum|gallery|artwork|hotel"](around:1600,${lat},${lng});node["shop"~"supermarket|convenience|bakery|greengrocer"](around:1600,${lat},${lng}););out body 90;`;
-        try {
-          const r = await fetch('https://overpass-api.de/api/interpreter', { method:'POST', body:q });
-          const j = await r.json();
-          nearbyResults = (j.elements||[]).filter(e => e.tags && e.tags.name).map(e => {
-            const [cat,emo] = catOf(e.tags);
-            return { name:e.tags.name, cat, emo, lat:e.lat, lng:e.lon, dist:distM(lat,lng,e.lat,e.lon) };
-          }).sort((x,y) => x.dist - y.dist);
-          status.innerHTML = nearbyResults.length ? `${nearbyResults.length} lieux trouvés dans un rayon de 1,6 km` : 'Rien trouvé ici.';
-          renderNearbyList();
-        } catch(e){ status.innerHTML = '⚠️ Erreur réseau (Overpass). Réessaie dans un instant.'; }
+      navigator.geolocation.getCurrentPosition(pos => {
+        nearbyPos = { lat:pos.coords.latitude, lng:pos.coords.longitude };
+        searchAround();
       }, err => { status.innerHTML = '❌ Localisation refusée. Autorise la position pour cette page.'; }, { enableHighAccuracy:true, timeout:12000, maximumAge:30000 });
+    }
+    async function searchAround(){
+      if (!nearbyPos) return findNearby();
+      const status = document.getElementById('nearbyStatus');
+      const { lat, lng } = nearbyPos;
+      status.innerHTML = `🔎 Recherche dans un rayon de ${fmtRad(nearbyRadius)}…`;
+      const limit = nearbyRadius >= 10000 ? 200 : (nearbyRadius >= 5000 ? 140 : 90);
+      const q = `[out:json][timeout:25];(node["amenity"~"restaurant|cafe|fast_food|bar|pub|fuel|pharmacy|bank|atm"](around:${nearbyRadius},${lat},${lng});node["tourism"~"attraction|viewpoint|museum|gallery|artwork|hotel"](around:${nearbyRadius},${lat},${lng});node["shop"~"supermarket|convenience|bakery|greengrocer"](around:${nearbyRadius},${lat},${lng}););out body ${limit};`;
+      try {
+        const r = await fetch('https://overpass-api.de/api/interpreter', { method:'POST', body:q });
+        const j = await r.json();
+        nearbyResults = (j.elements||[]).filter(e => e.tags && e.tags.name).map(e => {
+          const [cat,emo] = catOf(e.tags);
+          return { name:e.tags.name, cat, emo, lat:e.lat, lng:e.lon, dist:distM(lat,lng,e.lat,e.lon) };
+        }).sort((x,y) => x.dist - y.dist);
+        status.innerHTML = nearbyResults.length ? `${nearbyResults.length} lieux dans un rayon de ${fmtRad(nearbyRadius)}` : `Rien trouvé dans ${fmtRad(nearbyRadius)}.`;
+        renderNearbyList();
+      } catch(e){ status.innerHTML = '⚠️ Erreur réseau (Overpass). Le rayon est peut-être trop grand — réessaie ou réduis-le.'; }
     }
     function renderNearbyList(){
       const list = document.getElementById('nearbyList');
-      const items = nearbyResults.filter(r => nearbyCat==='tout' || r.cat===nearbyCat);
-      if (!items.length){ list.innerHTML = nearbyResults.length ? '<div class="text-center text-muted py-4">Aucun lieu dans cette catégorie.</div>' : ''; return; }
-      list.innerHTML = items.slice(0,50).map(r => {
+      nearbyShown = nearbyResults.filter(r => nearbyCat==='tout' || r.cat===nearbyCat).slice(0,50);
+      if (!nearbyShown.length){ list.innerHTML = nearbyResults.length ? '<div class="text-center text-muted py-4">Aucun lieu dans cette catégorie.</div>' : ''; return; }
+      list.innerHTML = nearbyShown.map((r,i) => {
         const d = r.dist>=1000 ? (r.dist/1000).toFixed(1)+' km' : r.dist+' m';
         return `<div class="card p-2 px-3 mb-2 shadow-sm">
           <div class="d-flex justify-content-between align-items-center">
             <div style="flex:1"><b>${r.emo} ${esc(r.name)}</b><br><small class="text-muted">à ${d}</small></div>
             <div class="d-flex gap-1">
               <a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lng}" target="_blank" class="btn btn-sm btn-outline-primary">Carte</a>
-              <button class="btn btn-sm btn-outline-warning" onclick="addNearbyIdea('${esc(r.name).replace(/'/g,"\\'")}')">+ Idée</button>
+              <button class="btn btn-sm btn-outline-primary" title="Ajouter au trajet" onclick="addNearbyStep(${i})">+📍</button>
+              <button class="btn btn-sm btn-outline-warning" title="Ajouter aux idées" onclick="addNearbyIdea(${i})">+💡</button>
             </div>
           </div></div>`;
       }).join('');
     }
-    function addNearbyIdea(name){
-      allData.idees.push({ lieu:name, note:'Repéré autour de moi' });
+    function addNearbyStep(i){
+      const r = nearbyShown[i]; if (!r) return;
+      allData.etapes.push({ day:currentDay, nom:r.name, detail:'', lieu:r.name, lat:r.lat, lng:r.lng });
+      saveData(); refreshAll(); renderDay(currentDay);
+      alert(`Ajouté au trajet · Jour ${currentDay} 📍`);
+    }
+    function addNearbyIdea(i){
+      const r = nearbyShown[i]; if (!r) return;
+      allData.idees.push({ lieu:r.name, note:'Repéré autour de moi' });
       saveData(); renderIdees(); alert('Ajouté aux idées 💡');
     }
 
@@ -518,6 +545,9 @@
     function numIcon(n){
       return L.divIcon({ className:'num-pin', iconSize:[28,28], iconAnchor:[14,28], popupAnchor:[0,-26],
         html:`<div style="background:#007bff;color:#fff;width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"><span style="transform:rotate(45deg);font-size:12px;font-weight:bold">${n}</span></div>` });
+    }
+    function goLink(lat,lng){
+      return `<a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank" style="display:inline-block;margin-top:6px;padding:5px 12px;background:#007bff;color:#fff;border-radius:8px;text-decoration:none;font-size:.85rem;font-weight:bold">🧭 S'y rendre</a>`;
     }
     function initFullMap(){
       if (fullMap){ setTimeout(()=>{ fullMap.invalidateSize(); renderFullMap(); }, 120); return; }
@@ -554,7 +584,7 @@
       // marqueurs numérotés (identiques dans les deux modes)
       stops.forEach((s, idx) => {
         L.marker(coords[idx], { icon:numIcon(idx+1) }).addTo(fullLayer)
-          .bindPopup(`<b>${getAutoIcon(s.nom,'📍')} ${esc(s.nom)}</b><br><small>Jour ${s.day} · ${esc(s.lieu||'')}</small>`);
+          .bindPopup(`<b>${getAutoIcon(s.nom,'📍')} ${esc(s.nom)}</b><br><small>Jour ${s.day} · ${esc(s.lieu||'')}</small><br>${goLink(s.lat,s.lng)}`);
       });
       if (mapMode === 'reel' && coords.length > 1){
         info.innerHTML = "🛣️ Calcul de l'itinéraire réel…";
@@ -698,7 +728,11 @@
           const bLink = billet ? `<div class="badge-billet" onclick="event.stopPropagation(); openBillet(${allData.billets.indexOf(billet)})">${billet.type==='photo'?'📷 Voir la photo':'🎟️ Billet dispo'}</div>` : '';
           const clickMap = hasMap ? `onclick="window.open('https://www.google.com/maps/search/?api=1&query=${e.lat},${e.lng}','_blank')"` : '';
           listDiv.innerHTML += `<div class="card p-3 border-start border-primary border-4 shadow-sm mb-2"><div class="d-flex justify-content-between align-items-start"><div style="flex:1; ${hasMap?'cursor:pointer':''}" ${clickMap}><h6 class="mb-1">${getAutoIcon(e.nom,'📍')} ${esc(e.nom)}</h6><small class="text-muted">${esc(e.detail||'')}</small><br>${bLink}</div><button class="btn btn-sm btn-light text-danger" onclick="del('etapes',${i})">🗑️</button></div></div>`;
-          if (hasMap){ L.marker([e.lat,e.lng]).addTo(markers); coords.push([e.lat,e.lng]); }
+          if (hasMap){
+            L.marker([e.lat,e.lng]).addTo(markers)
+              .bindPopup(`<b>${getAutoIcon(e.nom,'📍')} ${esc(e.nom)}</b>${e.detail?`<br><small>${esc(e.detail)}</small>`:''}<br>${goLink(e.lat,e.lng)}`);
+            coords.push([e.lat,e.lng]);
+          }
         });
       }
       if (coords.length) map.fitBounds(coords,{ padding:[50,50], maxZoom:12 });
@@ -732,8 +766,16 @@
     function renderIdees(){
       const el = document.getElementById('ideesList');
       if (!allData.idees.length){ el.innerHTML = emptyBox('💡','Aucune idée','idees','warning'); return; }
-      el.innerHTML = allData.idees.map((x,i)=>`<div class="card p-3 border-start border-warning border-4 shadow-sm mb-2"><div class="d-flex justify-content-between align-items-center"><div style="flex:1"><b>${getAutoIcon(x.lieu,'💡')} ${esc(x.lieu)}</b><br><small class="text-muted">${esc(x.note||'')}</small></div><button class="btn btn-sm text-danger" onclick="del('idees',${i})">🗑️</button></div></div>`).join('');
+      const rows = allData.idees.map((x,i)=>({x,i}));
+      const todo = rows.filter(o => !o.x.vu);
+      const done = rows.filter(o => o.x.vu);
+      const cardTodo = ({x,i}) => `<div class="card p-3 border-start border-warning border-4 shadow-sm mb-2"><div class="d-flex justify-content-between align-items-center"><div style="flex:1"><b>${getAutoIcon(x.lieu,'💡')} ${esc(x.lieu)}</b><br><small class="text-muted">${esc(x.note||'')}</small></div><div class="d-flex gap-1"><button class="btn btn-sm btn-outline-success" onclick="toggleVu(${i})" title="Marquer comme vu">✓ Vu</button><button class="btn btn-sm text-danger" onclick="del('idees',${i})">🗑️</button></div></div></div>`;
+      const cardDone = ({x,i}) => `<div class="card p-3 border-start border-secondary border-4 shadow-sm mb-2" style="opacity:.5"><div class="d-flex justify-content-between align-items-center"><div style="flex:1"><b style="text-decoration:line-through">${esc(x.lieu)}</b> <span class="badge bg-success">vu</span></div><div class="d-flex gap-1"><button class="btn btn-sm btn-outline-secondary" onclick="toggleVu(${i})" title="Remettre à faire">↩️</button><button class="btn btn-sm text-danger" onclick="del('idees',${i})">🗑️</button></div></div></div>`;
+      let html = todo.map(cardTodo).join('');
+      if (done.length){ html += `<div class="text-muted small mt-3 mb-1">Déjà vu (${done.length})</div>` + done.map(cardDone).join(''); }
+      el.innerHTML = html;
     }
+    function toggleVu(i){ allData.idees[i].vu = !allData.idees[i].vu; saveData(); renderIdees(); }
     function renderChecklist(){
       const el = document.getElementById('checkList');
       if (!allData.checklist.length){ el.innerHTML = emptyBox('✅','Valise vide ?','check','secondary'); return; }
@@ -870,7 +912,7 @@
 
     /* ============ INIT ============ */
     function bootApp(){
-      renderHeaderAvatar(); renderChips();
+      renderHeaderAvatar(); renderChips(); renderRadiusChips();
       initFirebase();
       const savedCode = localStorage.getItem(CODE_KEY);
       if (savedCode && db){ shareMode = true; shareCode = savedCode; listen(savedCode); }
