@@ -10,6 +10,7 @@ const LOCAL_ASSETS = [
 
 const isLive = h =>
   h.includes('open-meteo.com') || h.includes('overpass-api.de') ||
+  h.includes('nominatim.openstreetmap.org') ||
   h.includes('router.project-osrm.org') || h.includes('arcgisonline.com') ||
   h.includes('tile.openstreetmap.org') || h.includes('googleapis.com') ||
   h.includes('firebaseio.com') || h.includes('firestore.');

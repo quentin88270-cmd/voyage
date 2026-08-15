@@ -461,6 +461,13 @@
       </div><small class="text-muted">📍 ${esc(loc.lieu||'')}</small></div>`;
     }
     async function geocode(q){
+      // 1) Nominatim (OpenStreetMap) : adresses, hôtels, points d'intérêt
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`, { headers:{ 'Accept':'application/json' } });
+        const j = await r.json();
+        if (Array.isArray(j) && j.length) return { lat:parseFloat(j[0].lat), lng:parseFloat(j[0].lon) };
+      } catch(e){}
+      // 2) Repli : Open-Meteo (villes uniquement)
       try {
         const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=fr&format=json`);
         const j = await r.json();
@@ -861,7 +868,7 @@
 
     /* ============ WIZARD ============ */
     const WIZ = {
-      etapes:{ title:"Nouvelle étape", fields:[{k:'date',label:'Quel jour ?',type:'date'},{k:'nom',label:'Activité',type:'text'},{k:'detail',label:'Heure / détail',type:'text'},{k:'lieu',label:'Lieu (ville)',type:'text'},{k:'type',label:"Type (icône sur la carte)",type:'select',options:ETAPE_TYPES}]},
+      etapes:{ title:"Nouvelle étape", fields:[{k:'date',label:'Quel jour ?',type:'date'},{k:'nom',label:'Activité',type:'text'},{k:'detail',label:'Heure / détail',type:'text'},{k:'lieu',label:'Lieu (ville, adresse ou nom de lieu)',type:'text'},{k:'type',label:"Type (icône sur la carte)",type:'select',options:ETAPE_TYPES}]},
       billets:{ title:"Nouveau billet", fields:[{k:'nom',label:"Nom (identique à l'étape pour le lier)",type:'text'},{k:'value',label:'Lien ou photo',type:'linkfile'}]},
       budget:{ title:"Nouvelle dépense", fields:[{k:'objet',label:'Objet',type:'text'},{k:'montant',label:'Montant (€)',type:'number'},{k:'qui',label:'Qui a payé ?',type:'text'}]},
       idees:{ title:"Nouvelle idée", fields:[{k:'lieu',label:'Lieu / activité',type:'text'},{k:'note',label:'Note',type:'text'}]},
@@ -904,10 +911,12 @@
     async function finishWizard(){
       const btn = document.getElementById('btnNext'); btn.disabled = true; btn.innerText='…';
       const v = wizard.values;
+      let warn = null;
       if (wizard.type==='etapes'){
         const diff = Math.round((new Date(v.date+'T00:00:00') - new Date(allData.dateDepart+'T00:00:00'))/86400000);
         const g = v.lieu ? await geocode(v.lieu) : {lat:null,lng:null};
         allData.etapes.push({ day:diff, nom:v.nom||'Activité', detail:v.detail||'', lieu:v.lieu||'', lat:g.lat, lng:g.lng, type:v.type||'auto' });
+        if (v.lieu && g.lat == null) warn = "Lieu non localisé. L'étape est bien ajoutée, mais sans point sur la carte.\nRéessaie avec une adresse plus complète (ex. \"Hotel National, Antwerpen, Belgique\") ou juste la ville.";
       } else if (wizard.type==='billets'){ allData.billets.push({ nom:v.nom||'Billet', type:v._photo?'photo':'link', value:v.value||'' }); }
       else if (wizard.type==='budget'){ allData.budget.push({ objet:v.objet||'Dépense', montant:parseFloat(String(v.montant).replace(',','.'))||0, qui:v.qui||'' }); }
       else if (wizard.type==='idees'){ allData.idees.push({ lieu:v.lieu||'', note:v.note||'' }); }
@@ -916,6 +925,7 @@
       saveData();
       bootstrap.Modal.getInstance(document.getElementById('modalWizard')).hide();
       refreshAll(); renderDay(currentDay);
+      if (warn) alert(warn);
     }
     function compressImage(file,maxW,quality){
       return new Promise(res => {
