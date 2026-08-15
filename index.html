@@ -15,15 +15,15 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-      body { background:#f0f2f5; font-family: system-ui, sans-serif; padding-bottom:80px; }
+      body { background:#f0f2f5; font-family: system-ui, sans-serif; padding-bottom:calc(80px + env(safe-area-inset-bottom)); padding-top: env(safe-area-inset-top); padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
       .btn-fab {
         background: linear-gradient(135deg,#007bff,#0056b3); border:none;
         box-shadow:0 4px 15px rgba(0,123,255,.4); transition:transform .2s;
-        position:fixed; bottom:20px; right:20px; width:60px; height:60px;
+        position:fixed; bottom:calc(20px + env(safe-area-inset-bottom)); right:20px; width:60px; height:60px;
         border-radius:50%; font-size:30px; z-index:2000; color:#fff;
       }
       .btn-fab:active { transform:scale(.92); }
-      .nav-tabs { background:#fff; position:sticky; top:0; z-index:1000; border-bottom:none;
+      .nav-tabs { background:#fff; position:sticky; top:env(safe-area-inset-top); z-index:1000; border-bottom:none;
         flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; }
       .nav-tabs::-webkit-scrollbar { display:none; }
       .nav-tabs .nav-item { flex:0 0 auto; }
@@ -42,6 +42,8 @@
       .empty { text-align:center; padding:40px 15px; background:#fff; border-radius:20px; border:2px dashed #dee2e6; margin-top:10px; }
       .empty .emo { font-size:50px; opacity:.5; margin-bottom:10px; }
       .avatar-sm { width:34px; height:34px; border-radius:50%; object-fit:cover; }
+      .mini-av { width:26px; height:26px; border-radius:50%; border:2px solid #fff; object-fit:cover; margin-left:-8px; background:#007bff; color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:bold; }
+      .mini-av:first-child { margin-left:0; }
       .chip { border:1px solid #ced4da; background:#fff; border-radius:20px; padding:5px 12px; font-size:.85rem; cursor:pointer; }
       .chip.active { background:#007bff; color:#fff; border-color:#007bff; }
       .num-pin, .act-pin { background:transparent; border:none; }
@@ -70,12 +72,13 @@
     <button class="btn btn-fab" data-bs-toggle="modal" data-bs-target="#modalChoix" aria-label="Ajouter">+</button>
 
     <div class="d-flex justify-content-between align-items-center px-3 pt-1 pb-1">
-      <div class="d-flex align-items-center gap-2" onclick="openConfig()" style="cursor:pointer;">
+      <div class="d-flex align-items-center gap-2" onclick="openConfig()" style="cursor:pointer; min-width:0;">
         <div id="headerAvatar"></div>
-        <div>
-          <h5 id="mainTitle" class="fw-bold mb-0 text-dark" style="font-size:.9rem;">ROADBOOK</h5>
+        <div style="min-width:0;">
+          <h5 id="mainTitle" class="fw-bold mb-0 text-dark text-truncate" style="font-size:.9rem;">ROADBOOK</h5>
           <span id="modeBadge" style="font-size:.7rem;"></span>
         </div>
+        <div id="headerMembers" class="d-flex align-items-center ms-1"></div>
       </div>
       <button class="btn btn-link p-0 text-muted" style="font-size:1.2rem; text-decoration:none;" onclick="openConfig()">⚙️</button>
     </div>
@@ -291,6 +294,18 @@
       el.innerHTML = profile && profile.avatar
         ? `<img src="${profile.avatar}" class="avatar-sm">`
         : `<div class="avatar-sm" style="background:#007bff;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:bold">${profile ? esc((profile.pseudo||'?')[0].toUpperCase()) : '?'}</div>`;
+    }
+    function renderHeaderMembers(){
+      const el = document.getElementById('headerMembers');
+      if (!el) return;
+      const list = (shareMode && allData.members) ? Object.values(allData.members) : [];
+      if (!list.length){ el.innerHTML = ''; return; }
+      const shown = list.slice(0,4);
+      let h = shown.map(m => m.avatar
+        ? `<img src="${m.avatar}" class="mini-av" title="${esc(m.pseudo||'')}">`
+        : `<div class="mini-av" title="${esc(m.pseudo||'')}">${esc((m.pseudo||'?')[0].toUpperCase())}</div>`).join('');
+      if (list.length > 4) h += `<div class="mini-av" style="background:#6c757d">+${list.length-4}</div>`;
+      el.innerHTML = h;
     }
 
     /* ============ DONNÉES ============ */
@@ -745,10 +760,11 @@
     /* ============ RENDU ============ */
     function refreshAll(){
       document.getElementById('mainTitle').innerText = allData.title;
-      renderHeaderAvatar(); updateModeBadge();
+      renderHeaderAvatar(); updateModeBadge(); renderHeaderMembers();
       renderBillets(); renderBudget(); renderIdees(); renderChecklist(); renderSOS();
       updateCountdown();
       if (fullMap) renderFullMap();
+      const mc = document.getElementById('modalConfig'); if (mc && mc.classList.contains('show')) renderShareSection();
     }
     function renderDay(day){
       currentDay = day;
@@ -993,7 +1009,15 @@
       const carteBtn = document.querySelector('[data-bs-target="#carte"]');
       if (carteBtn) carteBtn.addEventListener('shown.bs.tab', () => { if (mapsSub==='prevu') initFullMap(); else initLiveMap(); });
 
-      if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+      if ('serviceWorker' in navigator){
+        const hadController = !!navigator.serviceWorker.controller;
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!hadController || refreshing) return; // pas de reload à la 1re install
+          refreshing = true; location.reload();
+        });
+        navigator.serviceWorker.register('service-worker.js').then(reg => { if (reg.update) reg.update(); }).catch(()=>{});
+      }
     });
     </script>
   </body>
