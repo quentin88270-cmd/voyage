@@ -1,7 +1,7 @@
 // Roadbook — service worker
 // Stratégie : le HTML se charge en RÉSEAU d'abord (mises à jour automatiques),
 // le statique (CDN, icônes) en cache d'abord, les APIs live jamais en cache.
-const CACHE = 'roadbook-v3';
+const CACHE = 'roadbook-v4';
 
 const LOCAL_ASSETS = [
   './', './index.html', './manifest.json',

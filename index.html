@@ -23,6 +23,7 @@
         border-radius:50%; font-size:30px; z-index:2000; color:#fff;
       }
       .btn-fab:active { transform:scale(.92); }
+      body.modal-open .btn-fab { display:none !important; }
       .nav-tabs { background:#fff; position:sticky; top:env(safe-area-inset-top); z-index:1000; border-bottom:none;
         flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; }
       .nav-tabs::-webkit-scrollbar { display:none; }
@@ -68,6 +69,32 @@
       </div>
     </div>
 
+    <div id="authOverlay" style="position:fixed; inset:0; z-index:5000; background:linear-gradient(160deg,#007bff,#0056b3); display:none; align-items:center; justify-content:center; padding:20px; overflow:auto;">
+      <div style="background:#fff; border-radius:20px; padding:24px; max-width:360px; width:100%;">
+        <h4 class="fw-bold mb-1">Roadbook</h4>
+        <p class="text-muted small mb-3">Un compte = une identité sur tous tes appareils, et pas de doublons dans un voyage.</p>
+        <div class="d-flex gap-1 mb-3">
+          <span class="chip active flex-fill text-center" id="authTabLogin" onclick="setAuthMode('login')">Connexion</span>
+          <span class="chip flex-fill text-center" id="authTabSignup" onclick="setAuthMode('signup')">Créer un compte</span>
+        </div>
+        <div id="authSignupExtra" style="display:none;">
+          <div class="text-center mb-2">
+            <label style="cursor:pointer;">
+              <div id="authAvatarPreview" style="width:80px; height:80px; border-radius:50%; background:#e9ecef; margin:0 auto 4px; display:flex; align-items:center; justify-content:center; font-size:32px; overflow:hidden;">📷</div>
+              <input type="file" id="authPhoto" accept="image/*" class="d-none" onchange="previewAuthAvatar(this)">
+              <small class="text-primary">Photo (facultatif)</small>
+            </label>
+          </div>
+          <input type="text" id="authPseudo" class="form-control mb-2" placeholder="Ton prénom / pseudo" autocomplete="off">
+        </div>
+        <input type="email" id="authEmail" class="form-control mb-2" placeholder="Email" autocomplete="username">
+        <input type="password" id="authPass" class="form-control mb-2" placeholder="Mot de passe" autocomplete="current-password">
+        <button class="btn btn-primary w-100 btn-lg mb-1" id="authSubmit" onclick="authSubmit()">Se connecter</button>
+        <div class="text-center"><button class="btn btn-link btn-sm text-muted" id="authForgotBtn" onclick="authForgot()">Mot de passe oublié ?</button></div>
+        <div id="authError" class="text-danger small text-center"></div>
+      </div>
+    </div>
+
     <div id="countdown">…</div>
     <button class="btn btn-fab" data-bs-toggle="modal" data-bs-target="#modalChoix" aria-label="Ajouter">+</button>
 
@@ -96,7 +123,20 @@
             <h6 class="fw-bold">🧳 Le voyage</h6>
             <div class="mb-2"><label class="small text-muted">Titre</label><input type="text" id="cfgTitle" class="form-control"></div>
             <div class="mb-2"><label class="small text-muted">Date de départ</label><input type="date" id="cfgDate" class="form-control"></div>
-            <button class="btn btn-primary w-100 mb-3" onclick="saveConfig()">Enregistrer</button>
+            <div class="mb-2"><label class="small text-muted">Description</label><textarea id="cfgDesc" class="form-control" rows="2" placeholder="Deux mots sur le voyage…"></textarea></div>
+            <div class="row g-2 mb-2">
+              <div class="col"><label class="small text-muted">Point de départ</label><input type="text" id="cfgDepart" class="form-control" placeholder="ex: Épinal"></div>
+              <div class="col"><label class="small text-muted">Point de retour</label><input type="text" id="cfgRetour" class="form-control" placeholder="ex: Épinal"></div>
+            </div>
+            <div class="mb-2">
+              <label class="small text-muted">Photo de couverture</label>
+              <div class="d-flex align-items-center gap-2">
+                <div id="cfgCoverPreview" style="width:70px;height:46px;border-radius:8px;background:#e9ecef;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:18px;">🏞️</div>
+                <input type="file" id="cfgCover" accept="image/*" class="form-control form-control-sm" onchange="previewCover(this)">
+              </div>
+            </div>
+            <button class="btn btn-primary w-100 mb-2" onclick="saveConfig()">Enregistrer</button>
+            <button class="btn btn-outline-dark w-100 mb-3" onclick="generateRecap()">📄 Compte rendu de fin de voyage (PDF)</button>
 
             <div class="d-flex gap-2 mb-3">
               <button class="btn btn-outline-secondary flex-fill" onclick="exportData()">⬇️ Exporter</button>
@@ -114,6 +154,7 @@
               <input type="text" id="cfgPseudo" class="form-control" placeholder="Pseudo">
               <button class="btn btn-primary" onclick="saveProfile()">OK</button>
             </div>
+            <div id="cfgAccount"></div>
           </div>
         </div>
       </div>
@@ -150,6 +191,19 @@
       </div>
     </div>
 
+    <div class="modal fade" id="modalHelp" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:20px;">
+          <div class="modal-header border-0"><h5 class="fw-bold">Un souci ? Une question ?</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+          <div class="modal-body">
+            <p class="small text-muted">Décris ton problème ou ta question, je le reçois directement.</p>
+            <textarea id="helpMsg" class="form-control" rows="4" placeholder="Ton message…"></textarea>
+          </div>
+          <div class="modal-footer border-0"><button type="button" class="btn btn-primary w-100" onclick="sendFeedback()">Envoyer</button></div>
+        </div>
+      </div>
+    </div>
+
     <ul class="nav nav-tabs shadow-sm mb-3">
       <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#etapes">📍 Trajet</button></li>
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#carte">🗺️ Maps</button></li>
@@ -159,10 +213,12 @@
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#idees">💡 Idées</button></li>
       <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#check">✅ Check</button></li>
       <li class="nav-item"><button class="nav-link text-danger" data-bs-toggle="tab" data-bs-target="#sos">🆘 SOS</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#aide">❔ Aide</button></li>
     </ul>
 
     <div class="tab-content container">
       <div class="tab-pane fade show active" id="etapes">
+        <div id="tripCover"></div>
         <div class="day-nav shadow-sm">
           <div class="d-flex justify-content-between align-items-center">
             <button class="btn btn-outline-primary btn-sm" onclick="changeDay(-1)">◀</button>
@@ -222,6 +278,35 @@
         </div>
         <div id="sosList"></div>
       </div>
+
+      <div class="tab-pane fade" id="aide">
+        <div class="card p-3 mb-2 shadow-sm">
+          <h6 class="fw-bold mb-1">👋 Comment ça marche</h6>
+          <p class="small text-muted mb-0">Roadbook organise un voyage à plusieurs. Le <b>+</b> bleu en bas ajoute étape, billet, dépense, idée, objet ou contact.</p>
+        </div>
+        <div class="card p-3 mb-2 shadow-sm">
+          <div class="small">
+            <div class="mb-1"><b>📍 Trajet</b> — tes journées une par une, avec carte, météo et pictos d'activité. Coche ✓ ce qui est fait.</div>
+            <div class="mb-1"><b>🗺️ Maps</b> — <b>Prévu</b> (vol d'oiseau ou par la route) et <b>En cours</b> (suivi GPS de ton trajet réel, avec bouton pour couper la localisation).</div>
+            <div class="mb-1"><b>🧭 Autour</b> — trouve resto, hôtel, essence… autour de toi ; rayon réglable ; ajout au trajet ou aux idées.</div>
+            <div class="mb-1"><b>🎟️ Billets</b> — lien ou photo. Même nom qu'une étape = lié automatiquement.</div>
+            <div class="mb-1"><b>💰 Budget</b> — dépenses et qui a payé quoi.</div>
+            <div class="mb-1"><b>💡 Idées</b> — la boîte à idées ; bouton 🧭 pour y aller, ✓ quand c'est vu.</div>
+            <div class="mb-1"><b>✅ Check</b> — la valise à cocher.</div>
+            <div class="mb-0"><b>🆘 SOS</b> — numéros d'urgence à portée de main.</div>
+          </div>
+        </div>
+        <div class="card p-3 mb-2 shadow-sm">
+          <h6 class="fw-bold mb-1">👥 Voyage à plusieurs</h6>
+          <p class="small text-muted mb-0">Roue crantée ⚙️ → <b>Voyage partagé</b> → <b>Créer</b> pour obtenir un code, ou <b>Rejoindre</b> avec le code d'un ami. Tout se synchronise en direct.</p>
+        </div>
+        <div class="d-grid gap-2 mt-3">
+          <button class="btn btn-primary" onclick="shareApp()">📣 Partager l'appli</button>
+          <button class="btn btn-outline-danger" onclick="openHelp()">🐞 Signaler un bug / demander de l'aide</button>
+          <button class="btn btn-success" onclick="openDon()">❤️ Soutenir le projet</button>
+        </div>
+        <p class="text-center text-muted small mt-3 mb-0">Roadbook — carnet de voyage</p>
+      </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -229,6 +314,7 @@
     <!-- Firebase (compat) : ne fait rien tant que FIREBASE_CONFIG n'est pas rempli -->
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
     <script>
     /* =========================================================
        CONFIG FIREBASE — remplace par la tienne (voir README).
@@ -243,6 +329,10 @@
       appId: "1:699677471074:web:0c49bfc256b56de00dbc3b"
     };
 
+    // Facultatif : lien de cagnotte (Leetchi…) et email de contact pour les signalements
+    const DON_URL = "";       // ex: "https://www.leetchi.com/c/xxxxxxx"
+    const CONTACT_EMAIL = ""; // ex: "toi@exemple.com"
+
     /* ============ CLÉS DE STOCKAGE ============ */
     const STORE_KEY   = 'roadbook_data_v1';
     const PROFILE_KEY = 'roadbook_profile';
@@ -252,7 +342,7 @@
     let profile   = loadProfile();
     let allData   = loadData();
     let shareMode = false, shareCode = null;
-    let db = null, unsub = null, writeTimer = null;
+    let db = null, auth = null, unsub = null, writeTimer = null;
     let map, markers = L.layerGroup(), userMarker, userCircle, currentDay = 0;
     const weatherCache = {};
     let nearbyResults = [], nearbyShown = [], nearbyPos = null, nearbyCat = 'tout', nearbyRadius = 1600;
@@ -285,7 +375,9 @@
       if (pendingAvatar) profile.avatar = pendingAvatar;
       saveProfileLocal(); pendingAvatar = null;
       renderHeaderAvatar();
-      // si on est dans un voyage partagé, on met à jour notre fiche membre
+      // compte connecté : on met à jour la fiche users/{uid}
+      if (auth && auth.currentUser && db){ db.collection('users').doc(profile.uid).set({ pseudo:profile.pseudo, avatar:profile.avatar||'' }, {merge:true}).catch(()=>{}); }
+      // voyage partagé : on met à jour notre fiche membre
       if (shareMode && db){ db.collection('trips').doc(shareCode).set({ members:{ [profile.uid]: memberObj() } }, {merge:true}); }
       alert("Profil enregistré ✅");
     }
@@ -311,6 +403,7 @@
     /* ============ DONNÉES ============ */
     function defaultData(){
       return { title:"MON ROAD TRIP", dateDepart:new Date().toISOString().split('T')[0],
+        description:'', cover:'', depart:null, retour:null,
         etapes:[], billets:[], budget:[], idees:[], checklist:[],
         sos:[{ nom:"Urgences Europe", numero:"112" }], members:{} };
     }
@@ -323,6 +416,8 @@
         writeTimer = setTimeout(() => {
           db.collection('trips').doc(shareCode).set({
             title:allData.title, dateDepart:allData.dateDepart,
+            description:allData.description||'', cover:allData.cover||'',
+            depart:allData.depart||null, retour:allData.retour||null,
             etapes:allData.etapes, billets:allData.billets, budget:allData.budget,
             idees:allData.idees, checklist:allData.checklist, sos:allData.sos,
             updatedAt:Date.now(), updatedBy:profile.pseudo
@@ -333,11 +428,83 @@
       }
     }
 
+    /* ============ AUTHENTIFICATION (comptes) ============ */
+    let authMode = 'login', pendingAuthAvatar = null;
+    function setAuthMode(m){
+      authMode = m;
+      document.getElementById('authTabLogin').classList.toggle('active', m==='login');
+      document.getElementById('authTabSignup').classList.toggle('active', m==='signup');
+      document.getElementById('authSignupExtra').style.display = m==='signup' ? 'block' : 'none';
+      document.getElementById('authSubmit').innerText = m==='signup' ? 'Créer mon compte' : 'Se connecter';
+      document.getElementById('authForgotBtn').style.display = m==='login' ? 'inline' : 'none';
+      document.getElementById('authError').innerText = '';
+    }
+    function previewAuthAvatar(input){
+      const f = input.files[0]; if (!f) return;
+      compressImage(f, 220, 0.6).then(d => { pendingAuthAvatar = d; document.getElementById('authAvatarPreview').innerHTML = `<img src="${d}" style="width:100%;height:100%;object-fit:cover">`; });
+    }
+    function authErr(msg){ document.getElementById('authError').innerText = msg; }
+    function mapAuthError(e){
+      const c = (e && e.code) || '';
+      if (c.includes('invalid-email')) return "Email invalide.";
+      if (c.includes('missing-password') || c.includes('weak-password')) return "Mot de passe trop court (6 caractères min).";
+      if (c.includes('email-already-in-use')) return "Un compte existe déjà avec cet email. Connecte-toi.";
+      if (c.includes('wrong-password') || c.includes('invalid-credential')) return "Email ou mot de passe incorrect.";
+      if (c.includes('user-not-found')) return "Aucun compte avec cet email.";
+      if (c.includes('too-many-requests')) return "Trop d'essais, réessaie plus tard.";
+      if (c.includes('network')) return "Pas de connexion internet.";
+      return "Erreur : " + ((e && e.message) || c);
+    }
+    async function authSubmit(){
+      authErr('');
+      const email = document.getElementById('authEmail').value.trim();
+      const pass = document.getElementById('authPass').value;
+      if (!email || !pass){ authErr("Remplis l'email et le mot de passe."); return; }
+      const btn = document.getElementById('authSubmit'); btn.disabled = true;
+      try {
+        if (authMode === 'signup'){
+          const pseudo = document.getElementById('authPseudo').value.trim();
+          if (!pseudo){ authErr("Choisis un pseudo."); btn.disabled = false; return; }
+          const cred = await auth.createUserWithEmailAndPassword(email, pass);
+          await db.collection('users').doc(cred.user.uid).set({ pseudo, avatar: pendingAuthAvatar || '', email });
+          // onAuthStateChanged prendra le relais
+        } else {
+          await auth.signInWithEmailAndPassword(email, pass);
+        }
+      } catch(e){ authErr(mapAuthError(e)); btn.disabled = false; }
+    }
+    async function authForgot(){
+      const email = document.getElementById('authEmail').value.trim();
+      if (!email){ authErr("Entre ton email d'abord."); return; }
+      try { await auth.sendPasswordResetEmail(email); authErr(''); alert("Email de réinitialisation envoyé à " + email); }
+      catch(e){ authErr(mapAuthError(e)); }
+    }
+    function authLogout(){
+      if (!auth) return;
+      if (!confirm("Se déconnecter ?")) return;
+      try { if (unsub) unsub(); } catch(e){}
+      localStorage.removeItem(CODE_KEY); localStorage.removeItem(PROFILE_KEY);
+      auth.signOut().then(() => location.reload());
+    }
+    async function loadUserProfile(user){
+      let data = { pseudo:'', avatar:'' };
+      try { const doc = await db.collection('users').doc(user.uid).get(); if (doc.exists) data = doc.data() || data; } catch(e){}
+      profile = { uid:user.uid, email:user.email || '', pseudo: data.pseudo || (user.email ? user.email.split('@')[0] : 'Voyageur'), avatar: data.avatar || '' };
+      saveProfileLocal();
+    }
+    function showAuth(){ const el = document.getElementById('authOverlay'); if (el) el.style.display = 'flex'; setAuthMode('login'); }
+    function hideAuth(){ const el = document.getElementById('authOverlay'); if (el) el.style.display = 'none'; }
+
     /* ============ FIREBASE / PARTAGE ============ */
     function fbConfigured(){ return !!(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId); }
     function initFirebase(){
       if (!fbConfigured() || !window.firebase) return false;
-      try { if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG); db = firebase.firestore(); return true; }
+      try {
+        if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+        db = firebase.firestore();
+        try { auth = firebase.auth(); } catch(e){ auth = null; }
+        return true;
+      }
       catch(e){ console.warn('firebase', e); return false; }
     }
     function memberObj(){ return { pseudo:profile.pseudo, avatar:profile.avatar || '', ts:Date.now() }; }
@@ -349,6 +516,8 @@
       try {
         await db.collection('trips').doc(code).set({
           title:allData.title, dateDepart:allData.dateDepart,
+          description:allData.description||'', cover:allData.cover||'',
+          depart:allData.depart||null, retour:allData.retour||null,
           etapes:allData.etapes, billets:allData.billets, budget:allData.budget,
           idees:allData.idees, checklist:allData.checklist, sos:allData.sos,
           members:{ [profile.uid]: memberObj() }, updatedAt:Date.now()
@@ -382,6 +551,7 @@
         const d = doc.data();
         allData = {
           title:d.title||'VOYAGE', dateDepart:d.dateDepart||new Date().toISOString().split('T')[0],
+          description:d.description||'', cover:d.cover||'', depart:d.depart||null, retour:d.retour||null,
           etapes:d.etapes||[], billets:d.billets||[], budget:d.budget||[],
           idees:d.idees||[], checklist:d.checklist||[], sos:d.sos||[], members:d.members||{}
         };
@@ -430,6 +600,33 @@
             <button class="btn btn-primary" onclick="joinShared(document.getElementById('joinCode').value)">Rejoindre</button></div>
           <div class="small text-muted mt-1">Crée un voyage, puis partage le code avec ceux qui viennent avec toi.</div>`;
       }
+    }
+
+    /* ============ AIDE / PARTAGE / DON ============ */
+    function shareApp(){
+      const url = location.href.split('#')[0].split('?')[0];
+      const txt = `Je vous partage l'appli que j'utilise pour organiser nos voyages : le trajet jour par jour, la carte, le budget commun, les idées de sorties… tout au même endroit, et ça se partage à plusieurs. Pas besoin d'installer quoi que ce soit, ça s'ouvre direct dans le navigateur 👉 ${url}`;
+      if (navigator.share) navigator.share({ title:'Roadbook', text:txt, url }).catch(()=>{});
+      else { navigator.clipboard.writeText(txt); alert("Message copié — tu peux le coller sur Facebook, WhatsApp, etc. :\n\n"+txt); }
+    }
+    function openDon(){
+      if (DON_URL) window.open(DON_URL, '_blank');
+      else alert("Astuce : ajoute ton lien de cagnotte (Leetchi…) dans DON_URL en haut du fichier pour activer ce bouton.");
+    }
+    function openHelp(){ new bootstrap.Modal(document.getElementById('modalHelp')).show(); }
+    async function sendFeedback(){
+      const msg = document.getElementById('helpMsg').value.trim();
+      if (!msg){ alert("Écris ton message d'abord."); return; }
+      let saved = false;
+      if (db){
+        try { await db.collection('feedback').add({ msg, pseudo: profile?profile.pseudo:'', uid: profile?profile.uid:'', trip: shareCode||'', ua: navigator.userAgent, ts: Date.now() }); saved = true; } catch(e){ console.warn(e); }
+      }
+      bootstrap.Modal.getInstance(document.getElementById('modalHelp')).hide();
+      document.getElementById('helpMsg').value = '';
+      if (CONTACT_EMAIL){
+        window.location.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Roadbook — signalement')}&body=${encodeURIComponent(msg + "\n\n— envoyé depuis Roadbook")}`;
+      } else if (saved){ alert("Merci, ton message a bien été envoyé ✅"); }
+      else { alert("Message non envoyé : configure Firebase ou un email de contact (CONTACT_EMAIL)."); }
     }
 
     /* ============ DATES / MÉTÉO / GÉOCODAGE ============ */
@@ -577,6 +774,7 @@
       auto:      { label:"✨ Auto (selon le nom)" },
       resto:     { label:"🍴 Repas / bar",       emo:'🍴', color:'#e67e22' },
       hotel:     { label:"🏨 Logement",          emo:'🏨', color:'#8e44ad' },
+      camping:   { label:"⛺ Camping / bivouac",  emo:'⛺', color:'#16a085' },
       plage:     { label:"🏖️ Plage",             emo:'🏖️', color:'#00b8d4' },
       rando:     { label:"🥾 Rando",             emo:'🥾', color:'#27ae60' },
       visite:    { label:"🏛️ Visite",            emo:'🏛️', color:'#795548' },
@@ -588,6 +786,7 @@
     function activityStyle(name){
       const t = String(name).toLowerCase();
       if (t.match(/resto|manger|dîner|déjeuner|repas|bar|café|brasserie/)) return { emo:'🍴', color:'#e67e22' };
+      if (t.match(/camping|bivouac|tente|caravane/)) return { emo:'⛺', color:'#16a085' };
       if (t.match(/hôtel|hotel|nuit|dodo|airbnb|camping|logement|dormir|gîte/)) return { emo:'🏨', color:'#8e44ad' };
       if (t.match(/plage|mer|baignade|calanque|crique|cala/)) return { emo:'🏖️', color:'#00b8d4' };
       if (t.match(/rando|marche|montagne|sentier|balade|trek/)) return { emo:'🥾', color:'#27ae60' };
@@ -634,19 +833,37 @@
       const res = { line: rt.geometry.coordinates.map(c => [c[1], c[0]]), distance: rt.distance, duration: rt.duration };
       osrmCache[key] = res; return res;
     }
+    function flagIcon(emo, color){
+      return L.divIcon({ className:'act-pin', iconSize:[34,34], iconAnchor:[17,34], popupAnchor:[0,-32],
+        html:`<div style="width:34px;height:34px;position:relative">
+          <div style="background:${color};width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);position:absolute;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>
+          <div style="position:absolute;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:16px">${emo}</div>
+        </div>` });
+    }
     async function renderFullMap(){
       if (!fullMap) return;
       fullLayer.clearLayers();
       const info = document.getElementById('fullMapInfo');
       const stops = allData.etapes.map((e,i)=>({e,i})).filter(x => x.e.lat && x.e.lng)
         .sort((a,b) => (a.e.day - b.e.day) || (a.i - b.i)).map(x => x.e);
-      if (!stops.length){ info.innerHTML = "Ajoute des étapes avec un <b>lieu</b> pour voir la vue d'ensemble du road trip."; return; }
-      const coords = stops.map(s => [s.lat, s.lng]);
-      // marqueurs numérotés (identiques dans les deux modes)
-      stops.forEach((s, idx) => {
-        L.marker(coords[idx], { icon:numIcon(idx+1) }).addTo(fullLayer)
-          .bindPopup(`<b>${getAutoIcon(s.nom,'📍')} ${esc(s.nom)}</b><br><small>Jour ${s.day} · ${esc(s.lieu||'')}</small><br>${goLink(s.lat,s.lng)}`);
+      // points ordonnés : départ, étapes, retour
+      const pts = [];
+      if (allData.depart && allData.depart.lat != null) pts.push({ kind:'depart', nom:allData.depart.name, lat:allData.depart.lat, lng:allData.depart.lng });
+      stops.forEach(s => pts.push({ kind:'stop', nom:s.nom, lieu:s.lieu, day:s.day, lat:s.lat, lng:s.lng }));
+      if (allData.retour && allData.retour.lat != null) pts.push({ kind:'retour', nom:allData.retour.name, lat:allData.retour.lat, lng:allData.retour.lng });
+
+      if (!pts.length){ info.innerHTML = "Ajoute des étapes avec un <b>lieu</b> (ou un point de départ) pour voir la vue d'ensemble."; return; }
+      const coords = pts.map(p => [p.lat, p.lng]);
+      // marqueurs
+      let n = 0;
+      pts.forEach((p, idx) => {
+        let icon, head;
+        if (p.kind === 'depart'){ icon = flagIcon('🚩','#27ae60'); head = `<b>🚩 Départ · ${esc(p.nom)}</b>`; }
+        else if (p.kind === 'retour'){ icon = flagIcon('🏁','#2c3e50'); head = `<b>🏁 Retour · ${esc(p.nom)}</b>`; }
+        else { n++; icon = numIcon(n); head = `<b>${getAutoIcon(p.nom,'📍')} ${esc(p.nom)}</b><br><small>Jour ${p.day} · ${esc(p.lieu||'')}</small>`; }
+        L.marker([p.lat,p.lng], { icon }).addTo(fullLayer).bindPopup(`${head}<br>${goLink(p.lat,p.lng)}`);
       });
+
       if (mapMode === 'reel' && coords.length > 1){
         info.innerHTML = "🛣️ Calcul de l'itinéraire réel…";
         try {
@@ -658,14 +875,14 @@
           fullMap.fitBounds(r.line, { padding:[40,40] });
         } catch(e){
           L.polyline(coords, { color:'#007bff', weight:3, opacity:.5, dashArray:'6,8' }).addTo(fullLayer);
-          info.innerHTML = "⚠️ Itinéraire réel indisponible (serveur de calcul occupé). Vue à vol d'oiseau affichée.";
+          info.innerHTML = "⚠️ Itinéraire réel indisponible (serveur occupé). Vue à vol d'oiseau affichée.";
           fullMap.fitBounds(coords, { padding:[40,40] });
         }
       } else {
         let total = 0;
         for (let i=1;i<coords.length;i++) total += distM(coords[i-1][0],coords[i-1][1],coords[i][0],coords[i][1]);
         L.polyline(coords, { color:'#007bff', weight:3, opacity:.75, dashArray:'6,8' }).addTo(fullLayer);
-        info.innerHTML = `📐 À vol d'oiseau · ${stops.length} étape${stops.length>1?'s':''} · ≈ <b>${(total/1000).toFixed(0)} km</b>`;
+        info.innerHTML = `📐 À vol d'oiseau · ${n} étape${n>1?'s':''} · ≈ <b>${(total/1000).toFixed(0)} km</b>`;
         if (coords.length > 1) fullMap.fitBounds(coords, { padding:[40,40] }); else fullMap.setView(coords[0], 10);
       }
     }
@@ -767,11 +984,26 @@
     /* ============ RENDU ============ */
     function refreshAll(){
       document.getElementById('mainTitle').innerText = allData.title;
-      renderHeaderAvatar(); updateModeBadge(); renderHeaderMembers();
+      renderHeaderAvatar(); updateModeBadge(); renderHeaderMembers(); renderCover();
       renderBillets(); renderBudget(); renderIdees(); renderChecklist(); renderSOS();
       updateCountdown();
       if (fullMap) renderFullMap();
       const mc = document.getElementById('modalConfig'); if (mc && mc.classList.contains('show')) renderShareSection();
+    }
+    function renderCover(){
+      const el = document.getElementById('tripCover'); if (!el) return;
+      if (!allData.cover && !allData.description){ el.innerHTML = ''; return; }
+      const trajet = (allData.depart && allData.depart.name) || (allData.retour && allData.retour.name)
+        ? `<div class="small mt-1">🚩 ${esc(allData.depart?allData.depart.name:'?')} → 🏁 ${esc(allData.retour?allData.retour.name:'?')}</div>` : '';
+      el.innerHTML = `<div style="position:relative;border-radius:15px;overflow:hidden;margin-bottom:12px;box-shadow:0 2px 6px rgba(0,0,0,.12);">
+        ${allData.cover ? `<img src="${allData.cover}" style="width:100%;height:150px;object-fit:cover;display:block;">` : `<div style="height:90px;background:linear-gradient(135deg,#007bff,#00c6ff);"></div>`}
+        <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.55),rgba(0,0,0,0));"></div>
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:12px;color:#fff;">
+          <div class="fw-bold" style="font-size:1.1rem;">${esc(allData.title)}</div>
+          ${allData.description ? `<div class="small" style="opacity:.95">${esc(allData.description)}</div>` : ''}
+          ${trajet}
+        </div>
+      </div>`;
     }
     function renderDay(day){
       currentDay = day;
@@ -941,19 +1173,40 @@
     }
 
     /* ============ CONFIG / SAUVEGARDE ============ */
+    let pendingCover = null;
+    function previewCover(input){
+      const f = input.files[0]; if (!f) return;
+      compressImage(f, 1000, 0.6).then(d => { pendingCover = d; document.getElementById('cfgCoverPreview').innerHTML = `<img src="${d}" style="width:100%;height:100%;object-fit:cover">`; });
+    }
     function openConfig(){
       document.getElementById('cfgTitle').value = allData.title;
       document.getElementById('cfgDate').value = allData.dateDepart;
+      document.getElementById('cfgDesc').value = allData.description || '';
+      document.getElementById('cfgDepart').value = allData.depart ? allData.depart.name : '';
+      document.getElementById('cfgRetour').value = allData.retour ? allData.retour.name : '';
+      document.getElementById('cfgCoverPreview').innerHTML = allData.cover ? `<img src="${allData.cover}" style="width:100%;height:100%;object-fit:cover">` : '🏞️';
+      pendingCover = null;
       document.getElementById('cfgPseudo').value = profile ? profile.pseudo : '';
       document.getElementById('cfgAvatar').innerHTML = (profile && profile.avatar) ? `<img src="${profile.avatar}" class="avatar-sm" style="width:48px;height:48px">` : '📷';
+      document.getElementById('cfgAccount').innerHTML = (auth && auth.currentUser)
+        ? `<div class="small text-muted mb-1">Connecté : ${esc(profile.email||'')}</div><button class="btn btn-outline-secondary btn-sm w-100" onclick="authLogout()">Se déconnecter</button>`
+        : '';
       renderShareSection();
       new bootstrap.Modal(document.getElementById('modalConfig')).show();
     }
-    function saveConfig(){
+    async function saveConfig(){
       const t = document.getElementById('cfgTitle').value.trim();
       const d = document.getElementById('cfgDate').value;
       if (t) allData.title = t; if (d) allData.dateDepart = d;
-      saveData(); refreshAll(); renderDay(0);
+      allData.description = document.getElementById('cfgDesc').value.trim();
+      if (pendingCover){ allData.cover = pendingCover; pendingCover = null; }
+      const dep = document.getElementById('cfgDepart').value.trim();
+      const ret = document.getElementById('cfgRetour').value.trim();
+      if (dep){ if (!allData.depart || allData.depart.name !== dep){ const g = await geocode(dep); allData.depart = { name:dep, lat:g.lat, lng:g.lng }; } }
+      else allData.depart = null;
+      if (ret){ if (!allData.retour || allData.retour.name !== ret){ const g = await geocode(ret); allData.retour = { name:ret, lat:g.lat, lng:g.lng }; } }
+      else allData.retour = null;
+      saveData(); refreshAll(); renderDay(currentDay);
       alert("Voyage enregistré ✅");
     }
     function resetTrip(){
@@ -990,6 +1243,116 @@
       setTimeout(() => { const c = document.getElementById('countdown'); if (c) c.classList.add('cd-hide'); }, 4500);
     }
 
+    /* ============ COMPTE RENDU PDF ============ */
+    function lazyLoad(src){
+      return new Promise((res, rej) => {
+        if (document.querySelector(`script[src="${src}"]`)) return res();
+        const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    }
+    async function detectCountries(points){
+      const seen = new Set(), countries = [];
+      for (const p of points.slice(0, 6)){
+        try {
+          const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&zoom=3&lat=${p[0]}&lon=${p[1]}`, { headers:{ 'Accept':'application/json' } });
+          const j = await r.json();
+          const c = j.address && j.address.country;
+          if (c && !seen.has(c)){ seen.add(c); countries.push(c); }
+        } catch(e){}
+        await new Promise(r => setTimeout(r, 1100)); // limite Nominatim ~1/s
+      }
+      return countries;
+    }
+    function drawTraceCanvas(pts, track){
+      const W = 1000, H = 560, pad = 60;
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const g = c.getContext('2d');
+      g.fillStyle = '#eef3f8'; g.fillRect(0, 0, W, H);
+      const all = pts.concat(track || []);
+      if (!all.length) return c.toDataURL('image/jpeg', 0.85);
+      const laArr = all.map(p=>p[0]), loArr = all.map(p=>p[1]);
+      const minLa=Math.min(...laArr), maxLa=Math.max(...laArr), minLo=Math.min(...loArr), maxLo=Math.max(...loArr);
+      const spanLa=(maxLa-minLa)||0.01, spanLo=(maxLo-minLo)||0.01;
+      const proj = p => [ pad + (p[1]-minLo)/spanLo*(W-2*pad), pad + (maxLa-p[0])/spanLa*(H-2*pad) ];
+      if (track && track.length>1){ g.strokeStyle='#dc3545'; g.lineWidth=5; g.beginPath(); track.forEach((p,i)=>{ const [x,y]=proj(p); i?g.lineTo(x,y):g.moveTo(x,y); }); g.stroke(); }
+      if (pts.length>1){ g.strokeStyle='#007bff'; g.lineWidth=4; g.setLineDash([12,9]); g.beginPath(); pts.forEach((p,i)=>{ const [x,y]=proj(p); i?g.lineTo(x,y):g.moveTo(x,y); }); g.stroke(); g.setLineDash([]); }
+      pts.forEach((p,i)=>{ const [x,y]=proj(p); g.fillStyle='#007bff'; g.beginPath(); g.arc(x,y,10,0,2*Math.PI); g.fill(); g.fillStyle='#fff'; g.font='bold 13px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(String(i+1),x,y); });
+      return c.toDataURL('image/jpeg', 0.85);
+    }
+    async function generateRecap(){
+      try { const mc = bootstrap.Modal.getInstance(document.getElementById('modalConfig')); if (mc) mc.hide(); } catch(e){}
+      const wait = document.createElement('div');
+      wait.style.cssText = 'position:fixed;inset:0;z-index:6000;background:rgba(0,0,0,.6);color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;font-weight:bold;';
+      wait.innerHTML = "📄 Génération du compte rendu…<br><small style='font-weight:normal;opacity:.85'>récupération des pays traversés, quelques secondes…</small>";
+      document.body.appendChild(wait);
+      try {
+        await lazyLoad('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+        const stops = allData.etapes.filter(e=>e.lat&&e.lng).slice().sort((a,b)=>a.day-b.day);
+        const pts = [];
+        if (allData.depart && allData.depart.lat!=null) pts.push([allData.depart.lat, allData.depart.lng]);
+        stops.forEach(s => pts.push([s.lat, s.lng]));
+        if (allData.retour && allData.retour.lat!=null) pts.push([allData.retour.lat, allData.retour.lng]);
+        const days = allData.etapes.length ? (Math.max(...allData.etapes.map(e=>e.day))+1) : 0;
+        let kmPrevu = 0; for (let i=1;i<pts.length;i++) kmPrevu += distM(pts[i-1][0],pts[i-1][1],pts[i][0],pts[i][1]); kmPrevu/=1000;
+        let kmRoute=null, dur=null;
+        if (pts.length>1){ try { const r=await fetchRoute(pts); kmRoute=r.distance/1000; dur=r.duration; } catch(e){} }
+        const track = loadTrack(); let kmReel=0; for (let i=1;i<track.length;i++) kmReel += distM(track[i-1][0],track[i-1][1],track[i][0],track[i][1]); kmReel/=1000;
+        const countries = await detectCountries(pts.length?pts:track);
+        const trace = drawTraceCanvas(pts, track);
+        const total = allData.budget.reduce((s,b)=>s+(b.montant||0),0);
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ unit:'mm', format:'a4' });
+        const w = 210; let y;
+        doc.setFillColor(0,123,255); doc.rect(0,0,w,34,'F');
+        doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(22);
+        doc.text(allData.title||'Road trip', 14, 18);
+        const dDep = new Date(allData.dateDepart+'T00:00:00'); const dEnd = new Date(dDep); dEnd.setDate(dEnd.getDate()+Math.max(0,days-1));
+        doc.setFont('helvetica','normal'); doc.setFontSize(11);
+        doc.text(`${dDep.toLocaleDateString('fr-FR')}  →  ${dEnd.toLocaleDateString('fr-FR')}`, 14, 27);
+        y = 42;
+        if (allData.cover){ try { doc.addImage(allData.cover,'JPEG',14,y,w-28,46); y+=52; } catch(e){} }
+        doc.setTextColor(40,40,40);
+        if (allData.description){ doc.setFont('helvetica','italic'); doc.setFontSize(11); const ls=doc.splitTextToSize(allData.description,w-28); doc.text(ls,14,y); y+=ls.length*6+3; doc.setFont('helvetica','normal'); }
+
+        const stats = [
+          ['Jours', days?days+' j':'—'],
+          ['Étapes', String(allData.etapes.length)],
+          ['Km prévus', (kmRoute!=null?kmRoute:kmPrevu).toFixed(0)+' km'],
+          ['Km parcourus', track.length>1?kmReel.toFixed(0)+' km':'—'],
+          ['Conduite', dur!=null?(Math.floor(dur/3600)+' h '+Math.round((dur%3600)/60)+' min'):'—'],
+          ['Budget', total.toFixed(0)+' €']
+        ];
+        const cardW=(w-28-12)/3, cardH=22;
+        stats.forEach((s,i)=>{
+          const col=i%3, row=Math.floor(i/3), x=14+col*(cardW+6), yy=y+row*(cardH+6);
+          doc.setFillColor(238,243,248); doc.roundedRect(x,yy,cardW,cardH,3,3,'F');
+          doc.setTextColor(0,123,255); doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.text(String(s[1]), x+cardW/2, yy+11, {align:'center'});
+          doc.setTextColor(120,120,120); doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.text(s[0], x+cardW/2, yy+18, {align:'center'});
+        });
+        y += 2*(cardH+6) + 4;
+
+        if (countries.length){ doc.setTextColor(40,40,40); doc.setFont('helvetica','normal'); doc.setFontSize(11); const ls=doc.splitTextToSize('Pays traversés : '+countries.join(', '), w-28); doc.text(ls,14,y); y+=ls.length*6+2; }
+
+        doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(40,40,40); doc.text('Le tracé', 14, y); y+=2;
+        try { const imgH=88; doc.addImage(trace,'JPEG',14,y,w-28,imgH); y+=imgH+6; } catch(e){}
+
+        if (y>250){ doc.addPage(); y=20; }
+        doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(40,40,40); doc.text('Les étapes', 14, y); y+=7;
+        allData.etapes.slice().sort((a,b)=>a.day-b.day).forEach(e=>{
+          if (y>285){ doc.addPage(); y=20; }
+          doc.setFont('helvetica','bold'); doc.setTextColor(0,123,255); doc.setFontSize(10); doc.text(`J${e.day}`, 14, y);
+          doc.setFont('helvetica','normal'); doc.setTextColor(40,40,40);
+          const ls=doc.splitTextToSize(e.nom+(e.lieu?' — '+e.lieu:''), w-34); doc.text(ls, 26, y); y += ls.length*5+1;
+        });
+
+        doc.setFontSize(8); doc.setTextColor(150,150,150); doc.text('Généré avec Roadbook', 14, 290);
+        doc.save('roadbook-'+(allData.title||'voyage').replace(/\s+/g,'_')+'.pdf');
+      } catch(e){ alert("Impossible de générer le PDF : "+((e&&e.message)||e)); }
+      finally { try { document.body.removeChild(wait); } catch(e){} }
+    }
+
     /* ============ INIT ============ */
     function bootApp(){
       renderHeaderAvatar(); renderChips(); renderRadiusChips();
@@ -1013,8 +1376,17 @@
         }
       });
 
-      if (!profile){ document.getElementById('profileOverlay').style.display = 'flex'; }
-      else { bootApp(); }
+      // Authentification : si Firebase est configuré, on passe par les comptes.
+      if (initFirebase() && auth){
+        auth.onAuthStateChanged(async user => {
+          if (user){ await loadUserProfile(user); hideAuth(); bootApp(); }
+          else { hideAuth(); showAuth(); }
+        });
+      } else {
+        // Mode local (sans Firebase) : ancien profil local
+        if (!profile){ document.getElementById('profileOverlay').style.display = 'flex'; }
+        else { bootApp(); }
+      }
 
       const carteBtn = document.querySelector('[data-bs-target="#carte"]');
       if (carteBtn) carteBtn.addEventListener('shown.bs.tab', () => { if (mapsSub==='prevu') initFullMap(); else initLiveMap(); });
