@@ -126,7 +126,7 @@
             <div class="mb-2"><label class="small text-muted">Description</label><textarea id="cfgDesc" class="form-control" rows="2" placeholder="Deux mots sur le voyage…"></textarea></div>
             <div class="row g-2 mb-2">
               <div class="col"><label class="small text-muted">Point de départ</label><input type="text" id="cfgDepart" class="form-control" placeholder="ex: Épinal"></div>
-              <div class="col"><label class="small text-muted">Point de retour</label><input type="text" id="cfgRetour" class="form-control" placeholder="ex: Épinal"></div>
+              <div class="col"><label class="small text-muted">Point d'arrivée</label><input type="text" id="cfgRetour" class="form-control" placeholder="vide = retour au départ"></div>
             </div>
             <div class="mb-2">
               <label class="small text-muted">Photo de couverture</label>
@@ -331,7 +331,7 @@
 
     // Facultatif : lien de cagnotte (Leetchi…) et email de contact pour les signalements
     const DON_URL = "";       // ex: "https://www.leetchi.com/c/xxxxxxx"
-    const CONTACT_EMAIL = ""; // ex: "toi@exemple.com"
+    const CONTACT_EMAIL = "info@monroadbook.com"; // ex: "toi@exemple.com"
 
     /* ============ CLÉS DE STOCKAGE ============ */
     const STORE_KEY   = 'roadbook_data_v1';
@@ -770,8 +770,7 @@
       return L.divIcon({ className:'num-pin', iconSize:[28,28], iconAnchor:[14,28], popupAnchor:[0,-26],
         html:`<div style="background:#007bff;color:#fff;width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"><span style="transform:rotate(45deg);font-size:12px;font-weight:bold">${n}</span></div>` });
     }
-    function goLink(lat,lng){
-      return `<a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank" style="display:inline-block;margin-top:6px;padding:5px 12px;background:#007bff;color:#fff;border-radius:8px;text-decoration:none;font-size:.85rem;font-weight:bold">🧭 S'y rendre</a>`;
+    function goLink(lat,lng){  return `<a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank" style="display:inline-block;margin-top:6px;padding:5px 12px;background:#007bff;color:#fff;border-radius:8px;text-decoration:none;font-size:.85rem;font-weight:bold">🧭 S'y rendre</a>`;
     }
     const ETAPE_TYPES = {
       auto:      { label:"✨ Auto (selon le nom)" },
@@ -862,7 +861,7 @@
       pts.forEach((p, idx) => {
         let icon, head;
         if (p.kind === 'depart'){ icon = flagIcon('🚩','#27ae60'); head = `<b>🚩 Départ · ${esc(p.nom)}</b>`; }
-        else if (p.kind === 'retour'){ icon = flagIcon('🏁','#2c3e50'); head = `<b>🏁 Retour · ${esc(p.nom)}</b>`; }
+        else if (p.kind === 'retour'){ icon = flagIcon('🏁','#2c3e50'); head = `<b>🏁 Arrivée · ${esc(p.nom)}</b>`; }
         else { n++; icon = numIcon(n); head = `<b>${getAutoIcon(p.nom,'📍')} ${esc(p.nom)}</b><br><small>Jour ${p.day} · ${esc(p.lieu||'')}</small>`; }
         L.marker([p.lat,p.lng], { icon }).addTo(fullLayer).bindPopup(`${head}<br>${goLink(p.lat,p.lng)}`);
       });
