@@ -48,6 +48,8 @@
       .chip { border:1px solid #ced4da; background:#fff; border-radius:20px; padding:5px 12px; font-size:.85rem; cursor:pointer; }
       .chip.active { background:#007bff; color:#fff; border-color:#007bff; }
       .num-pin, .act-pin { background:transparent; border:none; }
+      #notifBanner { display:none; align-items:center; justify-content:space-between; gap:10px; background:#fff3cd; color:#664d03; border:1px solid #ffe69c; border-radius:12px; padding:10px 14px; margin:0 10px 6px; font-size:.9rem; font-weight:600; box-shadow:0 2px 4px rgba(0,0,0,.06); }
+      #notifBanner button { border:none; background:transparent; color:#664d03; font-weight:bold; font-size:1rem; }
     </style>
   </head>
   <body>
@@ -96,6 +98,7 @@
     </div>
 
     <div id="countdown">…</div>
+    <div id="notifBanner"></div>
     <button class="btn btn-fab" data-bs-toggle="modal" data-bs-target="#modalChoix" aria-label="Ajouter">+</button>
 
     <div class="d-flex justify-content-between align-items-center px-3 pt-1 pb-1">
@@ -343,6 +346,7 @@
     let allData   = loadData();
     let shareMode = false, shareCode = null;
     let db = null, auth = null, unsub = null, writeTimer = null;
+    let lastUpdateAt = 0, firstSnapshot = true;
     let map, markers = L.layerGroup(), userMarker, userCircle, currentDay = 0;
     const weatherCache = {};
     let nearbyResults = [], nearbyShown = [], nearbyPos = null, nearbyCat = 'tout', nearbyRadius = 1600;
@@ -542,21 +546,79 @@
       try { if (unsub) unsub(); } catch(e){}
       try { await db.collection('trips').doc(shareCode).update({ ['members.'+profile.uid]: firebase.firestore.FieldValue.delete() }); } catch(e){}
       shareMode = false; shareCode = null; localStorage.removeItem(CODE_KEY);
+      const nb = document.getElementById('notifBanner'); if (nb) nb.style.display = 'none';
       allData = loadData(); refreshAll(); renderDay(0); updateModeBadge(); renderShareSection();
     }
     function listen(code){
       if (unsub) unsub();
+      firstSnapshot = true; lastUpdateAt = 0;
+      const seenKey = 'roadbook_seen_' + code;
+      const lastSeen = parseInt(localStorage.getItem(seenKey) || '0', 10);
       unsub = db.collection('trips').doc(code).onSnapshot(doc => {
         if (!doc.exists) return;
         const d = doc.data();
-        allData = {
+        // état précédent (avant écrasement) pour repérer ce qui a changé
+        const prevCounts = { etapes:(allData.etapes||[]).length, billets:(allData.billets||[]).length, budget:(allData.budget||[]).length, idees:(allData.idees||[]).length, checklist:(allData.checklist||[]).length, sos:(allData.sos||[]).length };
+        const prevMembers = Object.keys(allData.members || {});
+        const newData = {
           title:d.title||'VOYAGE', dateDepart:d.dateDepart||new Date().toISOString().split('T')[0],
           description:d.description||'', cover:d.cover||'', depart:d.depart||null, retour:d.retour||null,
           etapes:d.etapes||[], billets:d.billets||[], budget:d.budget||[],
           idees:d.idees||[], checklist:d.checklist||[], sos:d.sos||[], members:d.members||{}
         };
+        allData = newData;
+        // --- Notifications (niveau 1) ---
+        const upAt = d.updatedAt || 0;
+        const by = d.updatedBy || '';
+        const mine = profile && by === profile.pseudo;
+        if (firstSnapshot){
+          firstSnapshot = false;
+          if (lastSeen > 0 && upAt > lastSeen && by && !mine){
+            showNotifBanner(`✨ Du nouveau depuis ta dernière visite — par ${by}`, code, upAt);
+          } else {
+            localStorage.setItem(seenKey, String(upAt)); // à jour, rien à signaler
+          }
+        } else {
+          // quelqu'un a rejoint ?
+          const joined = Object.keys(newData.members).filter(k => !prevMembers.includes(k) && (!profile || k !== profile.uid));
+          if (joined.length){ const mj = newData.members[joined[0]]; showToast(`👋 ${(mj && mj.pseudo) || "Quelqu'un"} a rejoint le voyage`); }
+          // contenu modifié ?
+          if (upAt > lastUpdateAt && by && !mine) showToast(`👤 ${by} ${describeChange(prevCounts, newData)}`);
+          localStorage.setItem(seenKey, String(upAt)); // en direct dans l'appli = déjà vu
+        }
+        lastUpdateAt = upAt;
         refreshAll(); renderDay(currentDay);
       }, err => console.warn('snapshot', err));
+    }
+    function describeChange(prevC, next){
+      const cats = [
+        ['etapes','une étape','étapes'], ['billets','un billet','billets'],
+        ['budget','une dépense','dépenses'], ['idees','une idée','idées'],
+        ['checklist','un objet','objets'], ['sos','un contact','contacts']
+      ];
+      for (const [k, one, many] of cats){
+        const delta = (next[k] ? next[k].length : 0) - (prevC[k] || 0);
+        if (delta > 0) return delta === 1 ? `a ajouté ${one}` : `a ajouté ${delta} ${many}`;
+        if (delta < 0){ const n = -delta; return n === 1 ? `a retiré ${one}` : `a retiré ${n} ${many}`; }
+      }
+      return 'a mis à jour le voyage';
+    }
+    function showNotifBanner(msg, code, upAt){
+      const el = document.getElementById('notifBanner');
+      el.innerHTML = `<span>${msg}</span><button onclick="dismissNotif('${code}',${upAt})" aria-label="OK">✕</button>`;
+      el.style.display = 'flex';
+    }
+    function dismissNotif(code, upAt){
+      localStorage.setItem('roadbook_seen_' + code, String(upAt));
+      const el = document.getElementById('notifBanner'); if (el) el.style.display = 'none';
+    }
+    function showToast(msg){
+      let t = document.getElementById('toastMsg');
+      if (!t){ t = document.createElement('div'); t.id = 'toastMsg';
+        t.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom));background:#212529;color:#fff;padding:10px 16px;border-radius:20px;z-index:4000;font-size:.9rem;box-shadow:0 4px 12px rgba(0,0,0,.3);opacity:0;transition:opacity .3s;max-width:90%;text-align:center;';
+        document.body.appendChild(t); }
+      t.textContent = msg; t.style.opacity = '1';
+      clearTimeout(t._to); t._to = setTimeout(() => { t.style.opacity = '0'; }, 3500);
     }
     function ensureFirebase(){
       if (db) return true;
