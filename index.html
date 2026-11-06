@@ -170,6 +170,7 @@
           <div class="modal-header border-0"><h5 class="fw-bold">Ajouter au voyage</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
           <div class="modal-body d-grid gap-2">
             <button class="btn btn-outline-primary text-start p-3" onclick="startWizard('etapes')" data-bs-dismiss="modal">📍 Une étape</button>
+            <button class="btn btn-outline-dark text-start p-3" onclick="openAiImport()" data-bs-dismiss="modal">🤖 Importer depuis l'IA (ChatGPT / Gemini)</button>
             <button class="btn btn-outline-info text-start p-3" onclick="startWizard('billets')" data-bs-dismiss="modal">🎟️ Un billet / réservation</button>
             <button class="btn btn-outline-success text-start p-3" onclick="startWizard('budget')" data-bs-dismiss="modal">💰 Une dépense</button>
             <button class="btn btn-outline-warning text-start p-3" onclick="startWizard('idees')" data-bs-dismiss="modal">💡 Une idée de sortie</button>
@@ -190,6 +191,26 @@
             <button type="button" class="btn btn-light" id="btnPrev" onclick="prevStep()">Retour</button>
             <button type="button" class="btn btn-primary" id="btnNext" onclick="nextStep()">Suivant</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="modalAi" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius:20px;">
+          <div class="modal-header border-0"><h5 class="fw-bold">🤖 Importer depuis l'IA</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+          <div class="modal-body">
+            <p class="small text-muted mb-2"><b>1.</b> Copie le prompt, colle-le dans ChatGPT ou Gemini, et ajoute ta destination/tes dates.</p>
+            <button class="btn btn-outline-primary w-100 mb-2" onclick="copyAiPrompt()">📋 Copier le prompt pour l'IA</button>
+            <div class="d-flex gap-2 mb-3">
+              <a href="https://chat.openai.com/" target="_blank" class="btn btn-outline-secondary btn-sm flex-fill">Ouvrir ChatGPT</a>
+              <a href="https://gemini.google.com/" target="_blank" class="btn btn-outline-secondary btn-sm flex-fill">Ouvrir Gemini</a>
+            </div>
+            <p class="small text-muted mb-1"><b>2.</b> Colle ici la réponse de l'IA (le bloc entre crochets [ … ]) :</p>
+            <textarea id="aiInput" class="form-control" rows="7" placeholder='[ { "jour": 0, "activite": "…", "lieu": "…", "type": "visite", "heure": "10h" } ]' style="font-size:.8rem; font-family:monospace;"></textarea>
+            <div id="aiStatus" class="small mt-2"></div>
+          </div>
+          <div class="modal-footer border-0"><button type="button" class="btn btn-primary w-100" id="aiImportBtn" onclick="importFromAi()">Ajouter au trajet</button></div>
         </div>
       </div>
     </div>
@@ -312,13 +333,39 @@
       </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
     <!-- Firebase (compat) : ne fait rien tant que FIREBASE_CONFIG n'est pas rempli -->
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" crossorigin="anonymous"></script>
     <script>
+    /* ============ AFFICHEUR D'ERREUR (diagnostic) ============ */
+    (function(){
+      function showFatal(msg){
+        var d = document.getElementById('fatalErr');
+        if (!d){
+          d = document.createElement('div'); d.id = 'fatalErr';
+          d.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#b02a37;color:#fff;padding:12px 14px;border-radius:12px;font:12px/1.4 monospace;box-shadow:0 4px 16px rgba(0,0,0,.4);white-space:pre-wrap;word-break:break-word;max-height:45vh;overflow:auto;';
+          d.onclick = function(){ d.style.display = 'none'; };
+          if (document.body) document.body.appendChild(d);
+          else document.addEventListener('DOMContentLoaded', function(){ document.body.appendChild(d); });
+        }
+        d.style.display = 'block';
+        d.textContent = '⚠️ ' + msg + '\n\n(touche pour masquer)';
+      }
+      window.__showFatal = showFatal;
+      window.addEventListener('error', function(e){
+        var m = e.message || 'erreur';
+        if (e.filename) m += '  @ ' + String(e.filename).split('/').pop() + ':' + (e.lineno||'?');
+        if (e.error && e.error.stack) m += '\n' + String(e.error.stack).split('\n').slice(0,3).join('\n');
+        showFatal(m);
+      });
+      window.addEventListener('unhandledrejection', function(e){
+        var r = e.reason; showFatal('Promise: ' + ((r && (r.message||r.code)) || r));
+      });
+    })();
+
     /* =========================================================
        CONFIG FIREBASE — remplace par la tienne (voir README).
        Laisse tel quel pour rester en mode LOCAL (solo).
@@ -689,6 +736,62 @@
         window.location.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Roadbook — signalement')}&body=${encodeURIComponent(msg + "\n\n— envoyé depuis Roadbook")}`;
       } else if (saved){ alert("Merci, ton message a bien été envoyé ✅"); }
       else { alert("Message non envoyé : configure Firebase ou un email de contact (CONTACT_EMAIL)."); }
+    }
+
+    /* ============ IMPORT DEPUIS L'IA ============ */
+    function aiPromptText(){
+      const dDep = new Date(allData.dateDepart+'T00:00:00').toLocaleDateString('fr-FR');
+      return `Je prépare un road trip qui commence le ${dDep}. Le "jour 0" = le jour du départ, "jour 1" = le lendemain, etc.\n`
+        + `Propose-moi un programme d'étapes pour [DESTINATION] sur [NOMBRE] jours.\n\n`
+        + `Réponds UNIQUEMENT par un tableau JSON valide (rien d'autre, pas de texte autour), sous cette forme exacte :\n`
+        + `[\n  { "jour": 0, "activite": "Nom de l'activité", "lieu": "Ville ou adresse précise", "type": "visite", "heure": "10h" },\n  { "jour": 1, "activite": "…", "lieu": "…", "type": "resto", "heure": "" }\n]\n\n`
+        + `Règles : "jour" = entier à partir de 0. "lieu" = une ville, une adresse ou un lieu précis géocodable. `
+        + `"type" doit valoir l'un de : resto, hotel, camping, plage, rando, visite, transport, avion, bateau, poi. `
+        + `"heure" est facultatif. N'invente pas d'adresses fausses ; si tu n'es pas sûr, mets juste la ville.`;
+    }
+    function copyAiPrompt(){
+      const txt = aiPromptText();
+      const done = () => { const s=document.getElementById('aiStatus'); s.className='small mt-2 text-success'; s.innerText='✅ Prompt copié — colle-le dans ChatGPT/Gemini.'; };
+      if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(done, ()=>{ prompt('Copie le prompt :', txt); }); }
+      else { prompt('Copie le prompt :', txt); }
+    }
+    function openAiImport(){
+      document.getElementById('aiInput').value = '';
+      document.getElementById('aiStatus').innerText = '';
+      new bootstrap.Modal(document.getElementById('modalAi')).show();
+    }
+    const AI_TYPES = ['resto','hotel','camping','plage','rando','visite','transport','avion','bateau','poi'];
+    async function importFromAi(){
+      const raw = document.getElementById('aiInput').value.trim();
+      const status = document.getElementById('aiStatus');
+      if (!raw){ status.className='small mt-2 text-danger'; status.innerText='Colle d\'abord la réponse de l\'IA.'; return; }
+      // on isole le tableau JSON même si l'IA a ajouté du texte autour
+      let arr = null;
+      try { arr = JSON.parse(raw); } catch(e){
+        const s = raw.indexOf('['), en = raw.lastIndexOf(']');
+        if (s !== -1 && en > s){ try { arr = JSON.parse(raw.slice(s, en+1)); } catch(e2){} }
+      }
+      if (!Array.isArray(arr) || !arr.length){ status.className='small mt-2 text-danger'; status.innerText='❌ Format non reconnu. Il faut le tableau JSON [ … ] renvoyé par l\'IA.'; return; }
+      const btn = document.getElementById('aiImportBtn'); btn.disabled = true; btn.innerText='…';
+      let added = 0;
+      for (const it of arr){
+        if (!it || typeof it !== 'object') continue;
+        const nom = String(it.activite || it.nom || it.activity || '').trim();
+        if (!nom) continue;
+        const lieu = String(it.lieu || it.place || '').trim();
+        const day = parseInt(it.jour != null ? it.jour : (it.day != null ? it.day : 0), 10) || 0;
+        let type = String(it.type || 'auto').toLowerCase().trim(); if (!AI_TYPES.includes(type)) type = 'auto';
+        const heure = String(it.heure || it.time || '').trim();
+        status.className='small mt-2 text-muted'; status.innerText = `Géocodage… (${added+1}/${arr.length})`;
+        let g = { lat:null, lng:null };
+        if (lieu){ g = await geocode(lieu); await new Promise(r=>setTimeout(r,600)); } // respect limite Nominatim
+        allData.etapes.push({ day, nom, detail:heure, lieu, lat:g.lat, lng:g.lng, type });
+        added++;
+      }
+      saveData(); refreshAll(); renderDay(currentDay);
+      btn.disabled = false; btn.innerText = 'Ajouter au trajet';
+      bootstrap.Modal.getInstance(document.getElementById('modalAi')).hide();
+      alert(`${added} étape${added>1?'s':''} ajoutée${added>1?'s':''} au trajet 🤖`);
     }
 
     /* ============ DATES / MÉTÉO / GÉOCODAGE ============ */
@@ -1448,36 +1551,55 @@
     function bootApp(){
       renderHeaderAvatar(); renderChips(); renderRadiusChips();
       initFirebase();
+      // On affiche TOUT DE SUITE les données locales (jamais d'écran bloqué)…
+      allData = loadData(); refreshAll(); renderDay(0);
+      // …puis si un voyage partagé est enregistré, la synchro le met à jour quand elle arrive.
       const savedCode = localStorage.getItem(CODE_KEY);
       if (savedCode && db){ shareMode = true; shareCode = savedCode; listen(savedCode); }
-      else { allData = loadData(); refreshAll(); renderDay(0); }
       updateModeBadge();
       scheduleCountdownHide();
     }
     window.addEventListener('load', () => {
-      map = L.map('map').setView([46.8,2.5],5);
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution:'Tiles © Esri' }).addTo(map);
-      markers.addTo(map);
-      map.locate({ setView:false });
-      map.on('locationfound', e => {
-        if (userMarker){ userMarker.setLatLng(e.latlng); userCircle.setLatLng(e.latlng).setRadius(e.accuracy/2); }
-        else {
-          userMarker = L.marker(e.latlng, { icon: L.divIcon({ className:'user-loc', html:'<div style="background:#007bff;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 5px rgba(0,0,0,.5)"></div>', iconSize:[12,12] }) }).addTo(map);
-          userCircle = L.circle(e.latlng, e.accuracy/2, { fillOpacity:.1, stroke:false }).addTo(map);
-        }
-      });
-
-      // Authentification : si Firebase est configuré, on passe par les comptes.
-      if (initFirebase() && auth){
-        auth.onAuthStateChanged(async user => {
-          if (user){ await loadUserProfile(user); hideAuth(); bootApp(); }
-          else { hideAuth(); showAuth(); }
+      try {
+        map = L.map('map').setView([46.8,2.5],5);
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution:'Tiles © Esri' }).addTo(map);
+        markers.addTo(map);
+        map.locate({ setView:false });
+        map.on('locationfound', e => {
+          if (userMarker){ userMarker.setLatLng(e.latlng); userCircle.setLatLng(e.latlng).setRadius(e.accuracy/2); }
+          else {
+            userMarker = L.marker(e.latlng, { icon: L.divIcon({ className:'user-loc', html:'<div style="background:#007bff;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 5px rgba(0,0,0,.5)"></div>', iconSize:[12,12] }) }).addTo(map);
+            userCircle = L.circle(e.latlng, e.accuracy/2, { fillOpacity:.1, stroke:false }).addTo(map);
+          }
         });
-      } else {
-        // Mode local (sans Firebase) : ancien profil local
-        if (!profile){ document.getElementById('profileOverlay').style.display = 'flex'; }
-        else { bootApp(); }
-      }
+      } catch(err){ if (window.__showFatal) window.__showFatal('Carte: '+(err && (err.message||err))); }
+
+      function safeBoot(){ try { bootApp(); } catch(err){ if (window.__showFatal) window.__showFatal('bootApp: '+(err && (err.message||err))); } }
+      function localFallback(){ hideAuth(); if (!profile){ document.getElementById('profileOverlay').style.display = 'flex'; } else safeBoot(); }
+
+      let started = false;
+      try {
+        // Authentification : si Firebase est configuré, on passe par les comptes.
+        if (initFirebase() && auth){
+          auth.onAuthStateChanged(user => {
+            started = true;
+            (async () => {
+              try {
+                if (user){ await loadUserProfile(user); hideAuth(); safeBoot(); }
+                else { hideAuth(); showAuth(); }
+              } catch(err){ if (window.__showFatal) window.__showFatal('auth: '+(err && (err.message||err))); localFallback(); }
+            })();
+          }, err => { if (window.__showFatal) window.__showFatal('auth-listener: '+(err && (err.message||err))); localFallback(); });
+        } else {
+          started = true; localFallback();
+        }
+      } catch(err){ if (window.__showFatal) window.__showFatal('init: '+(err && (err.message||err))); localFallback(); }
+
+      // Filet de sécurité : si rien n'a démarré après 6 s (Firebase muet/bloqué), on démarre en local.
+      setTimeout(() => {
+        const c = document.getElementById('countdown');
+        if (!started && c && c.textContent.trim() === '…'){ localFallback(); }
+      }, 3500);
 
       const carteBtn = document.querySelector('[data-bs-target="#carte"]');
       if (carteBtn) carteBtn.addEventListener('shown.bs.tab', () => { if (mapsSub==='prevu') initFullMap(); else initLiveMap(); });
